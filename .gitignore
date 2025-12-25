@@ -1,3 +1,7 @@
+#Build artifacts! Let the pipeline make these
+main.js
+
+
 # Logs
 logs
 *.log
