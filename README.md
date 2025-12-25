@@ -47,7 +47,7 @@ Unlike standard template plugins that just paste a date, DaySpark calculates the
 ### 📜 Seasons & Lore
 
 - **Solar Events:** Automatically flags Equinoxes and Solstices.
-- **Weather Lore:** Includes traditional monthly weather proverbs and rhymes.
+- **Weather Lore:** Includes traditional monthly weather proverbs and rhymes. (To be honest: this might not be super useful in a daily. I wanted to put this in a monthly, but I got distracted with just daily stuff. The list came from the 2026 Farmers Almanac.)
     
 
 ## 🚀 Installation
