@@ -1,0 +1,10 @@
+{
+	"id": "dayspark",
+	"name": "DaySpark",
+	"version": "1.0.0",
+	"minAppVersion": "0.15.0",
+	"description": "Add magic context to your daily notes.",
+	"author": "You",
+	"authorUrl": "https://github.com/yourname/dayspark",
+	"isDesktopOnly": false
+}
