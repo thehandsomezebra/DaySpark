@@ -114,4 +114,4 @@ DaySpark is privacy-focused:
 ## 🗺️ Roadmap
 
 
-- **Location History:** Integration with Google Takeout location data.
+- ?? That's it?
