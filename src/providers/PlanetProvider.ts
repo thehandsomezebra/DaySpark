@@ -47,8 +47,8 @@ export class PlanetProvider implements SparkProvider {
             if (!times.rise || !times.set || !times.riseDate || !times.setDate) continue;
 
             const elong = this.calculateElongation(pPos.eclipticLon, pPos.eclipticLat, sunPos.lon);
+            // FILTER: If too close to Sun, skip (don't show "Not visible")
             if (elong < 10) { 
-                items.push(`${planet.symbol} **${planet.name}:** Not visible (Too close to Sun)`);
                 continue;
             }
 
@@ -75,7 +75,8 @@ export class PlanetProvider implements SparkProvider {
                 status = `Visible in Morning (Rises ${times.rise})`;
             }
             else {
-                status = `Not visible (Up during day)`;
+                // FILTER: If "Up during day", skip entirely
+                continue;
             }
 
             const isHardRise = (Math.abs(pRise - sunRiseNext) < 90*60000); 

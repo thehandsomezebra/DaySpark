@@ -20,6 +20,13 @@ Unlike standard template plugins that just paste a date, DaySpark calculates the
 - **Rise & Set:** Precise local times for Sun and Moon, accounting for your exact coordinates and Daylight Saving Time.
     
 
+### ✨ Celestial Events
+
+- **Conjunctions:** Identifies when planets or the Moon pass each other in the sky (e.g., `☌ ☾ ♃`).
+- **Meteor Showers:** Alerts you to major meteor shower peaks (e.g., Perseids, Geminids).
+- **Lunar Events:** Tracks Nodes (`at ☊`), Equator crossings (`on Eq.`), and distance extremes (`at Perig.`/`at Apo.`).
+
+
 ### 🪐 Sky Watch
 
 - **Planetary Visibility:** Tells you which naked-eye planets (Mercury, Venus, Mars, Jupiter, Saturn) are visible tonight.
