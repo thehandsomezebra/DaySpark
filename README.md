@@ -47,7 +47,7 @@ Unlike standard template plugins that just paste a date, DaySpark calculates the
 
 ### 📍 Dynamic Location
 
-- **Auto-Detection:** Automatically reverse-geocodes your default Lat/Long settings to a city name (e.g., "Waterford, MI").
+- **Auto-Detection:** Automatically reverse-geocodes your default Lat/Long settings to a city name (e.g., "Detroit, MI").
 - **Travel Ready:** Manually override the location for a specific note by adding a `## My Location` section. DaySpark will recalculate the sun, moon, and weather for _that_ specific place.
     
 
