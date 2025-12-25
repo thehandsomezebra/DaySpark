@@ -1,4 +1,5 @@
 import { SparkProvider, ProviderResult, DaySparkSettings } from '../interfaces';
+import { resolveLocation } from '../utils';
 
 export class SunProvider implements SparkProvider {
     id = 'sun-times';
@@ -11,15 +12,17 @@ export class SunProvider implements SparkProvider {
         if (this.settings.sunHeader) this.targetHeader = this.settings.sunHeader;
     }
 
-    async getDataForDate(targetDate: Date): Promise<ProviderResult> {
+    async getDataForDate(targetDate: Date, fileContent?: string): Promise<ProviderResult> {
         if (!this.settings.enableSun) return { items: [] };
 
-        // Check if lat/long are roughly valid
-        if (this.settings.latitude === 0 && this.settings.longitude === 0) {
+        // Resolve location
+        const location = await resolveLocation(this.settings, fileContent);
+
+        if (location.lat === 0 && location.lng === 0) {
              return { items: ["_Sun Times: Please set Latitude/Longitude in DaySpark settings._"] };
         }
 
-        const times = this.getSunTimes(targetDate, this.settings.latitude, this.settings.longitude);
+        const times = this.getSunTimes(targetDate, location.lat, location.lng);
         
         if (!times) return { items: [] };
 
@@ -42,8 +45,8 @@ export class SunProvider implements SparkProvider {
         // 2. Convert Longitude to Hour Value (lngHour)
         const lngHour = lng / 15;
 
-        // Calculate Timezone Offset based on the TARGET DATE
-        const offsetMinutes = date.getTimezoneOffset();
+        // Calculate Timezone Offset based on the TARGET DATE, not "now".
+        const offsetMinutes = date.getTimezoneOffset(); // returns positive if behind UTC
         const localOffsetHours = -offsetMinutes / 60;
 
         // 3. Calculate Rise/Set
@@ -60,14 +63,17 @@ export class SunProvider implements SparkProvider {
         const t = N + ((isSunrise ? 6 : 18) - lngHour) / 24;
         const M = (0.9856 * t) - 3.289;
         
+        // Sun's true longitude
         let L = M + (1.916 * Math.sin(this.degToRad(M))) + (0.020 * Math.sin(this.degToRad(2 * M))) + 282.634;
         if (L > 360) L = L - 360;
         else if (L < 0) L = L + 360;
 
+        // Right Ascension
         let RA = this.radToDeg(Math.atan(0.91764 * Math.tan(this.degToRad(L))));
         if (RA > 360) RA = RA - 360;
         else if (RA < 0) RA = RA + 360;
 
+        // RA needs to be in same quadrant as L
         const Lquadrant = (Math.floor(L / 90)) * 90;
         const RAquadrant = (Math.floor(RA / 90)) * 90;
         RA = RA + (Lquadrant - RAquadrant);
@@ -76,11 +82,12 @@ export class SunProvider implements SparkProvider {
         const sinDec = 0.39782 * Math.sin(this.degToRad(L));
         const cosDec = Math.cos(Math.asin(sinDec));
 
-        const zenith = 90.833;
+        // Sun's local hour angle
+        const zenith = 90.833; // Official zenith
         const cosH = (Math.cos(this.degToRad(zenith)) - (sinDec * Math.sin(this.degToRad(lat)))) / (cosDec * Math.cos(this.degToRad(lat)));
 
-        if (cosH > 1) return null;
-        if (cosH < -1) return null;
+        if (cosH > 1) return null; // Sun never rises
+        if (cosH < -1) return null; // Sun never sets
 
         let H;
         if (isSunrise) {
@@ -95,6 +102,7 @@ export class SunProvider implements SparkProvider {
         if (UT > 24) UT = UT - 24;
         else if (UT < 0) UT = UT + 24;
 
+        // Convert UTC to Local Time using the offset passed in
         let localT = UT + localOffsetHours;
         
         if (localT >= 24) localT -= 24;
@@ -113,7 +121,6 @@ export class SunProvider implements SparkProvider {
         const mStr = minutes < 10 ? '0' + minutes : minutes;
         const sStr = seconds < 10 ? '0' + seconds : seconds;
 
-        // CHANGED: Respect 24-hour setting
         if (this.settings.use24HourFormat) {
             const hStr = hours < 10 ? '0' + hours : hours;
             return `${hStr}:${mStr}:${sStr}`;

@@ -1,5 +1,6 @@
 import { SparkProvider, ProviderResult, DaySparkSettings } from '../interfaces';
-import { requestUrl, Notice } from 'obsidian';
+import { requestUrl } from 'obsidian';
+import { resolveLocation } from '../utils';
 
 export class WeatherProvider implements SparkProvider {
     id = 'weather-context';
@@ -12,51 +13,40 @@ export class WeatherProvider implements SparkProvider {
         if (this.settings.weatherHeader) this.targetHeader = this.settings.weatherHeader;
     }
 
-    async getDataForDate(targetDate: Date): Promise<ProviderResult> {
+    async getDataForDate(targetDate: Date, fileContent?: string): Promise<ProviderResult> {
         if (!this.settings.enableWeather) return { items: [] };
 
-        // 1. Determine Date & API Strategy
-        // Open-Meteo requires YYYY-MM-DD
-        const dateStr = this.formatDateISO(targetDate);
+        // 1. Get Location (Dynamic or Default)
+        const location = await resolveLocation(this.settings, fileContent);
         
-        // Strategy:
-        // Future/Today/Recent Past (last 5 days) -> Forecast API
-        // Older Past -> Archive API
+        // 2. Determine API Strategy
+        const dateStr = this.formatDateISO(targetDate);
         const now = new Date();
         const diffTime = targetDate.getTime() - now.getTime();
         const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-        
         const isArchive = diffDays < -5;
 
-        // 2. Build URL
-        const lat = this.settings.latitude;
-        const lng = this.settings.longitude;
+        // 3. Build URL
         const unitTemp = this.settings.useMetric ? 'celsius' : 'fahrenheit';
         const unitWind = this.settings.useMetric ? 'kmh' : 'mph';
         
         let url = "";
-        
         if (isArchive) {
-            // Historical Data
-            url = `https://archive-api.open-meteo.com/v1/archive?latitude=${lat}&longitude=${lng}&start_date=${dateStr}&end_date=${dateStr}&daily=weather_code,temperature_2m_max,temperature_2m_min,wind_speed_10m_max,wind_direction_10m_dominant&temperature_unit=${unitTemp}&wind_speed_unit=${unitWind}&timezone=auto`;
+            url = `https://archive-api.open-meteo.com/v1/archive?latitude=${location.lat}&longitude=${location.lng}&start_date=${dateStr}&end_date=${dateStr}&daily=weather_code,temperature_2m_max,temperature_2m_min,wind_speed_10m_max,wind_direction_10m_dominant&temperature_unit=${unitTemp}&wind_speed_unit=${unitWind}&timezone=auto`;
         } else {
-            // Forecast (includes recent past)
-            // Note: We might need 'past_days' if target is yesterday, but supplying start/end date usually works for forecast range
-            url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&start_date=${dateStr}&end_date=${dateStr}&daily=weather_code,temperature_2m_max,temperature_2m_min,wind_speed_10m_max,wind_direction_10m_dominant&temperature_unit=${unitTemp}&wind_speed_unit=${unitWind}&timezone=auto`;
+            url = `https://api.open-meteo.com/v1/forecast?latitude=${location.lat}&longitude=${location.lng}&start_date=${dateStr}&end_date=${dateStr}&daily=weather_code,temperature_2m_max,temperature_2m_min,wind_speed_10m_max,wind_direction_10m_dominant&temperature_unit=${unitTemp}&wind_speed_unit=${unitWind}&timezone=auto`;
         }
 
-        console.log(`DaySpark Weather: Fetching (${isArchive ? 'Archive' : 'Forecast'})`, url);
+        console.log(`DaySpark Weather: Fetching for ${location.name}`, url);
 
         try {
             const response = await requestUrl({ url: url });
             const data = response.json;
 
             if (!data || !data.daily || !data.daily.time || data.daily.time.length === 0) {
-                console.warn("DaySpark: No weather data found.");
                 return { items: [] };
             }
 
-            // 3. Extract Data (First index is the target day)
             const i = 0;
             const high = Math.round(data.daily.temperature_2m_max[i]);
             const low = Math.round(data.daily.temperature_2m_min[i]);
@@ -64,28 +54,26 @@ export class WeatherProvider implements SparkProvider {
             const windSpeed = Math.round(data.daily.wind_speed_10m_max[i]);
             const windDirDeg = data.daily.wind_direction_10m_dominant[i];
 
-            // 4. Format Output
             const wmo = this.getWmoInfo(code);
             const windDir = this.degreesToDirection(windDirDeg);
             const tempUnit = this.settings.useMetric ? '°C' : '°F';
             const windUnit = this.settings.useMetric ? 'km/h' : 'mph';
 
+            const locLine = `📍 **Location:** ${location.name}`;
             const weatherLine = `${wmo.emoji} **${wmo.label}:** High ${high}${tempUnit} / Low ${low}${tempUnit}`;
             const windLine = `💨 **Wind:** ${windSpeed} ${windUnit} ${windDir}`;
 
             return {
-                items: [weatherLine, windLine]
+                items: [locLine, weatherLine, windLine]
             };
 
         } catch (err) {
             console.error("DaySpark: Weather API Error", err);
-            // new Notice("DaySpark: Could not fetch weather."); // Optional: Don't spam user on fail
             return { items: [] };
         }
     }
 
     private formatDateISO(date: Date): string {
-        // Returns YYYY-MM-DD
         const year = date.getFullYear();
         const month = String(date.getMonth() + 1).padStart(2, '0');
         const day = String(date.getDate()).padStart(2, '0');
@@ -94,13 +82,11 @@ export class WeatherProvider implements SparkProvider {
 
     private degreesToDirection(degrees: number): string {
         const directions = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
-        // Split 360 into 16 slices (22.5 deg each). Offset by half slice (11.25) to center N.
         const val = Math.floor((degrees / 22.5) + 0.5);
         return directions[val % 16];
     }
 
     private getWmoInfo(code: number): { label: string, emoji: string } {
-        // WMO Weather interpretation codes (WW)
         const codes: { [key: number]: { label: string, emoji: string } } = {
             0: { label: 'Clear Sky', emoji: '☀️' },
             1: { label: 'Mainly Clear', emoji: '🌤️' },
@@ -131,7 +117,6 @@ export class WeatherProvider implements SparkProvider {
             96: { label: 'Thunderstorm with Slight Hail', emoji: '⛈️' },
             99: { label: 'Thunderstorm with Heavy Hail', emoji: '⛈️' }
         };
-
         return codes[code] || { label: 'Unknown', emoji: '❓' };
     }
 }

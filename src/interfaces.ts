@@ -9,7 +9,6 @@ export interface SparkProvider {
     id: string;
     displayName: string;
     targetHeader: string;
-    // UPDATED: Now accepts 'fileContent' context
     getDataForDate(date: Date, fileContent?: string): Promise<ProviderResult>;
 }
 
@@ -35,7 +34,7 @@ export interface DaySparkSettings {
     // Location Settings
     latitude: number;
     longitude: number;
-    defaultLocationName: string; // NEW: Friendly name for default coords
+    // defaultLocationName REMOVED - Auto-calculated now
     use24HourFormat: boolean;
 
     // Almanac Settings
@@ -53,6 +52,9 @@ export interface DaySparkSettings {
     enableWeather: boolean;
     weatherHeader: string;
     useMetric: boolean;
+
+    // General Behavior
+    replaceContext: boolean;
 }
 
 export const DEFAULT_SETTINGS: DaySparkSettings = {
@@ -72,7 +74,6 @@ export const DEFAULT_SETTINGS: DaySparkSettings = {
     sunHeader: '## Daily Context',
     latitude: 40.7128, 
     longitude: -74.0060,
-    defaultLocationName: "Local Coordinates", // Default label
     use24HourFormat: false,
     enableAlmanac: true,
     almanacHeader: '## Almanac',
@@ -81,5 +82,6 @@ export const DEFAULT_SETTINGS: DaySparkSettings = {
     enableSeasons: true,
     enableWeather: true,
     weatherHeader: '## Weather',
-    useMetric: false 
+    useMetric: false,
+    replaceContext: true
 };

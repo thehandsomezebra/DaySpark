@@ -7014,7 +7014,7 @@ __export(main_exports, {
   default: () => DaySparkPlugin
 });
 module.exports = __toCommonJS(main_exports);
-var import_obsidian3 = require("obsidian");
+var import_obsidian4 = require("obsidian");
 
 // src/interfaces.ts
 var DEFAULT_SETTINGS = {
@@ -7040,15 +7040,15 @@ var DEFAULT_SETTINGS = {
   enablePlanets: true,
   planetHeader: "## Sky Watch",
   enableSeasons: true,
-  // Weather Defaults
   enableWeather: true,
   weatherHeader: "## Weather",
-  useMetric: false
-  // Default to Imperial (Fahrenheit/mph)
+  useMetric: false,
+  replaceContext: true
 };
 
 // src/utils.ts
-function insertOrUpdateSection(content, header, newItems) {
+var import_obsidian = require("obsidian");
+function insertOrUpdateSection(content, header, newItems, replace = false) {
   const lines = content.split("\n");
   const headerIndex = lines.findIndex((line) => line.trim() === header.trim());
   if (headerIndex === -1) {
@@ -7060,18 +7060,24 @@ ${header}
   let sectionEndIndex = lines.findIndex((line, index) => index > headerIndex && line.startsWith("#"));
   if (sectionEndIndex === -1)
     sectionEndIndex = lines.length;
-  const existingContent = lines.slice(headerIndex + 1, sectionEndIndex).join("\n");
-  const itemsToAdd = [];
-  for (const item of newItems) {
-    if (!existingContent.includes(item.trim())) {
-      itemsToAdd.push(`- ${item}`);
+  if (replace) {
+    const newSectionLines = newItems.map((item) => `- ${item}`);
+    lines.splice(headerIndex + 1, sectionEndIndex - (headerIndex + 1), ...newSectionLines);
+    return lines.join("\n");
+  } else {
+    const existingContent = lines.slice(headerIndex + 1, sectionEndIndex).join("\n");
+    const itemsToAdd = [];
+    for (const item of newItems) {
+      if (!existingContent.includes(item.trim())) {
+        itemsToAdd.push(`- ${item}`);
+      }
     }
+    if (itemsToAdd.length === 0) {
+      return content;
+    }
+    lines.splice(sectionEndIndex, 0, ...itemsToAdd);
+    return lines.join("\n");
   }
-  if (itemsToAdd.length === 0) {
-    return content;
-  }
-  lines.splice(sectionEndIndex, 0, ...itemsToAdd);
-  return lines.join("\n");
 }
 function getDateFromFile(file, app) {
   var _a;
@@ -7087,9 +7093,94 @@ function getDateFromFile(file, app) {
   }
   return null;
 }
+async function reverseGeocode(lat, lng) {
+  try {
+    const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`;
+    const res = await (0, import_obsidian.requestUrl)({
+      url,
+      headers: { "User-Agent": "DaySpark-Obsidian-Plugin/1.0" }
+    });
+    if (res.status === 200) {
+      const data = JSON.parse(res.text);
+      const addr = data.address;
+      if (addr) {
+        const city = addr.city || addr.town || addr.village || addr.municipality || addr.hamlet || addr.suburb || "";
+        const region = addr.state || addr.country || "";
+        if (city) {
+          return `${city}${region ? ", " + region : ""}`;
+        }
+      }
+    }
+  } catch (e) {
+    console.error("DaySpark: Reverse geocoding failed", e);
+  }
+  return null;
+}
+async function resolveLocation(settings, content) {
+  if (content) {
+    const match = content.match(/## My Location\s*\n[\s\-\*]*([^\n]+)/i);
+    if (match && match[1]) {
+      let query = match[1].trim();
+      query = query.replace(/[\[\]]/g, "");
+      console.log(`DaySpark: Found custom location "${query}", geocoding...`);
+      try {
+        const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(query)}&count=1&language=en&format=json`;
+        const res = await (0, import_obsidian.requestUrl)({ url });
+        if (res.status === 200) {
+          const data = JSON.parse(res.text);
+          if (data && data.results && data.results.length > 0) {
+            const loc = data.results[0];
+            const region = loc.admin1 || loc.country || "";
+            return {
+              lat: loc.latitude,
+              lng: loc.longitude,
+              name: `${loc.name}${region ? ", " + region : ""}`
+            };
+          }
+        }
+      } catch (e) {
+        console.warn("DaySpark: Open-Meteo Geocoding failed, trying fallback...", e);
+      }
+      try {
+        const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1`;
+        const res = await (0, import_obsidian.requestUrl)({
+          url,
+          headers: { "User-Agent": "DaySpark-Obsidian-Plugin/1.0" }
+        });
+        if (res.status === 200) {
+          const data = JSON.parse(res.text);
+          if (data && data.length > 0) {
+            const loc = data[0];
+            return {
+              lat: parseFloat(loc.lat),
+              lng: parseFloat(loc.lon),
+              name: loc.display_name.split(",")[0]
+            };
+          }
+        }
+      } catch (e) {
+        console.error("DaySpark: All geocoding strategies failed", e);
+      }
+    }
+  }
+  let fallbackName = `${settings.latitude.toFixed(4)}, ${settings.longitude.toFixed(4)}`;
+  try {
+    const friendlyName = await reverseGeocode(settings.latitude, settings.longitude);
+    if (friendlyName) {
+      fallbackName = friendlyName;
+    }
+  } catch (e) {
+    console.error("DaySpark: Default location reverse geocode failed", e);
+  }
+  return {
+    lat: settings.latitude,
+    lng: settings.longitude,
+    name: fallbackName
+  };
+}
 
 // src/providers/IcsProvider.ts
-var import_obsidian = require("obsidian");
+var import_obsidian2 = require("obsidian");
 var ICAL = __toESM(require_ical());
 var IcsProvider = class {
   constructor(app, group) {
@@ -7123,16 +7214,16 @@ var IcsProvider = class {
       try {
         if (url.startsWith("http")) {
           console.log(`DaySpark [${this.group.name}]: Fetching Web ICS from: ${url}`);
-          const response = await (0, import_obsidian.requestUrl)({ url });
+          const response = await (0, import_obsidian2.requestUrl)({ url });
           icsData = response.text;
         } else {
           console.log(`DaySpark [${this.group.name}]: Looking for local file: ${url}`);
           const file = this.app.vault.getAbstractFileByPath(url);
-          if (file instanceof import_obsidian.TFile) {
+          if (file instanceof import_obsidian2.TFile) {
             icsData = await this.app.vault.read(file);
           } else {
             const fileWithExt = this.app.vault.getAbstractFileByPath(url + ".ics");
-            if (fileWithExt instanceof import_obsidian.TFile) {
+            if (fileWithExt instanceof import_obsidian2.TFile) {
               icsData = await this.app.vault.read(fileWithExt);
             } else {
               console.warn(`DaySpark: Local file not found: ${url}`);
@@ -7180,7 +7271,7 @@ var IcsProvider = class {
       } catch (err) {
         console.error(`DaySpark: Error processing ${url}`, err);
         if (url.includes("google")) {
-          new import_obsidian.Notice(`DaySpark: Google Error. If private, please use a local .ics file or the Secret Address.`);
+          new import_obsidian2.Notice(`DaySpark: Google Error. If private, please use a local .ics file or the Secret Address.`);
         }
       }
     }
@@ -7198,21 +7289,22 @@ var MoonProvider = class {
     if (this.settings.moonHeader)
       this.targetHeader = this.settings.moonHeader;
   }
-  async getDataForDate(targetDate) {
+  async getDataForDate(targetDate, fileContent) {
     if (!this.settings.enableMoon)
       return { items: [] };
+    const location = await resolveLocation(this.settings, fileContent);
     const utcMidnightDate = new Date(targetDate);
     utcMidnightDate.setUTCHours(0, 0, 0, 0);
-    const moonPosMidnight = this.getMoonPosition(utcMidnightDate, this.settings.latitude, this.settings.longitude);
+    const moonPosMidnight = this.getMoonPosition(utcMidnightDate, location.lat, location.lng);
     const zodiac = this.getAstronomicalConstellation(moonPosMidnight.eclipticLongitude, moonPosMidnight.eclipticLatitude);
     const noonDate = new Date(targetDate);
     noonDate.setHours(12, 0, 0, 0);
-    const moonPosNoon = this.getMoonPosition(noonDate, this.settings.latitude, this.settings.longitude);
+    const moonPosNoon = this.getMoonPosition(noonDate, location.lat, location.lng);
     const sunPosNoon = this.getSunPosition(noonDate);
     const phaseData = this.calculatePhase(moonPosNoon.eclipticLongitude, sunPosNoon.eclipticLongitude);
     const prevNewMoonDate = this.findPreviousNewMoon(noonDate);
     const age = this.getCalendarDayDifference(prevNewMoonDate, utcMidnightDate);
-    const times = this.getMoonTimes(targetDate, this.settings.latitude, this.settings.longitude);
+    const times = this.getMoonTimes(targetDate, location.lat, location.lng);
     const items = [
       `${phaseData.emoji} **Phase:** ${phaseData.name} (${phaseData.illumination}%)`,
       `**Astronomical Position:** ${zodiac.symbol} ${zodiac.name}`,
@@ -7315,11 +7407,6 @@ var MoonProvider = class {
     };
   }
   // --- CONSTELLATION MAPPING ---
-  // NOTE: This uses simplified longitudinal slices to approximate the IAU constellation boundaries.
-  // Real constellation boundaries are complex polygons defined in 1875 Equatorial coordinates.
-  // Because of this "Irregular Border" (as the Almanac notes), the Moon may be in a specific 
-  // "corner" of a constellation that this simple longitude check misses on border days.
-  // This method is ~98% accurate but may differ from the Almanac on transition days.
   getAstronomicalConstellation(lon, lat) {
     let l = lon % 360;
     if (l < 0)
@@ -7417,13 +7504,14 @@ var SunProvider = class {
     if (this.settings.sunHeader)
       this.targetHeader = this.settings.sunHeader;
   }
-  async getDataForDate(targetDate) {
+  async getDataForDate(targetDate, fileContent) {
     if (!this.settings.enableSun)
       return { items: [] };
-    if (this.settings.latitude === 0 && this.settings.longitude === 0) {
+    const location = await resolveLocation(this.settings, fileContent);
+    if (location.lat === 0 && location.lng === 0) {
       return { items: ["_Sun Times: Please set Latitude/Longitude in DaySpark settings._"] };
     }
-    const times = this.getSunTimes(targetDate, this.settings.latitude, this.settings.longitude);
+    const times = this.getSunTimes(targetDate, location.lat, location.lng);
     if (!times)
       return { items: [] };
     return {
@@ -7632,13 +7720,14 @@ var PlanetProvider = class {
     if (this.settings.planetHeader)
       this.targetHeader = this.settings.planetHeader;
   }
-  async getDataForDate(targetDate) {
+  async getDataForDate(targetDate, fileContent) {
     if (!this.settings.enablePlanets)
       return { items: [] };
+    const location = await resolveLocation(this.settings, fileContent);
     const items = [];
     const noonDate = new Date(targetDate);
     noonDate.setHours(12, 0, 0, 0);
-    const sunTimes = this.getSunTimes(noonDate, this.settings.latitude, this.settings.longitude);
+    const sunTimes = this.getSunTimes(noonDate, location.lat, location.lng);
     const sunPos = this.getSunPosition(noonDate);
     if (!sunTimes.rise || !sunTimes.set || !sunTimes.riseDate || !sunTimes.setDate)
       return { items: [] };
@@ -7654,7 +7743,7 @@ var PlanetProvider = class {
     ];
     for (const planet of planets) {
       const pPos = this.getPlanetPosition(noonDate, planet.id);
-      const times = this.calcRiseSet(noonDate, this.settings.latitude, this.settings.longitude, pPos.ra, pPos.dec);
+      const times = this.calcRiseSet(noonDate, location.lat, location.lng, pPos.ra, pPos.dec);
       if (!times.rise || !times.set || !times.riseDate || !times.setDate)
         continue;
       const elong = this.calculateElongation(pPos.eclipticLon, pPos.eclipticLat, sunPos.lon);
@@ -7691,7 +7780,7 @@ var PlanetProvider = class {
     }
     return { items };
   }
-  // --- ASTRONOMY MATH ---
+  // --- ASTRONOMY MATH (Keplerian Elements) ---
   calculateElongation(pLon, pLat, sLon) {
     const rad = Math.PI / 180;
     let dLon = pLon - sLon;
@@ -7721,11 +7810,10 @@ var PlanetProvider = class {
     }
     const xv = p.a * (Math.cos(E * rad) - p.e);
     const yv = p.a * Math.sqrt(1 - p.e * p.e) * Math.sin(E * rad);
-    const v = Math.atan2(yv, xv) * (180 / Math.PI);
     const r = Math.sqrt(xv * xv + yv * yv);
-    const xh = r * (Math.cos(p.N * rad) * Math.cos((v + p.w) * rad) - Math.sin(p.N * rad) * Math.sin((v + p.w) * rad) * Math.cos(p.i * rad));
-    const yh = r * (Math.sin(p.N * rad) * Math.cos((v + p.w) * rad) + Math.cos(p.N * rad) * Math.sin((v + p.w) * rad) * Math.cos(p.i * rad));
-    const zh = r * (Math.sin((v + p.w) * rad) * Math.sin(p.i * rad));
+    const xh = r * (Math.cos(p.N * rad) * Math.cos((p.w + Math.atan2(yv, xv) * (180 / Math.PI)) * rad) - Math.sin(p.N * rad) * Math.sin((p.w + Math.atan2(yv, xv) * (180 / Math.PI)) * rad) * Math.cos(p.i * rad));
+    const yh = r * (Math.sin(p.N * rad) * Math.cos((p.w + Math.atan2(yv, xv) * (180 / Math.PI)) * rad) + Math.cos(p.N * rad) * Math.sin((p.w + Math.atan2(yv, xv) * (180 / Math.PI)) * rad) * Math.cos(p.i * rad));
+    const zh = r * (Math.sin((p.w + Math.atan2(yv, xv) * (180 / Math.PI)) * rad) * Math.sin(p.i * rad));
     const Me = 357.529 + 0.98560028 * d;
     const Le = 280.466 + 0.98564736 * d;
     const le = Le + 1.915 * Math.sin(Me * rad) + 0.02 * Math.sin(2 * Me * rad);
@@ -7908,7 +7996,7 @@ var SeasonProvider = class {
 };
 
 // src/providers/WeatherProvider.ts
-var import_obsidian2 = require("obsidian");
+var import_obsidian3 = require("obsidian");
 var WeatherProvider = class {
   constructor(settings) {
     this.id = "weather-context";
@@ -7918,30 +8006,28 @@ var WeatherProvider = class {
     if (this.settings.weatherHeader)
       this.targetHeader = this.settings.weatherHeader;
   }
-  async getDataForDate(targetDate) {
+  async getDataForDate(targetDate, fileContent) {
     if (!this.settings.enableWeather)
       return { items: [] };
+    const location = await resolveLocation(this.settings, fileContent);
     const dateStr = this.formatDateISO(targetDate);
     const now = new Date();
     const diffTime = targetDate.getTime() - now.getTime();
     const diffDays = Math.ceil(diffTime / (1e3 * 60 * 60 * 24));
     const isArchive = diffDays < -5;
-    const lat = this.settings.latitude;
-    const lng = this.settings.longitude;
     const unitTemp = this.settings.useMetric ? "celsius" : "fahrenheit";
     const unitWind = this.settings.useMetric ? "kmh" : "mph";
     let url = "";
     if (isArchive) {
-      url = `https://archive-api.open-meteo.com/v1/archive?latitude=${lat}&longitude=${lng}&start_date=${dateStr}&end_date=${dateStr}&daily=weather_code,temperature_2m_max,temperature_2m_min,wind_speed_10m_max,wind_direction_10m_dominant&temperature_unit=${unitTemp}&wind_speed_unit=${unitWind}&timezone=auto`;
+      url = `https://archive-api.open-meteo.com/v1/archive?latitude=${location.lat}&longitude=${location.lng}&start_date=${dateStr}&end_date=${dateStr}&daily=weather_code,temperature_2m_max,temperature_2m_min,wind_speed_10m_max,wind_direction_10m_dominant&temperature_unit=${unitTemp}&wind_speed_unit=${unitWind}&timezone=auto`;
     } else {
-      url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&start_date=${dateStr}&end_date=${dateStr}&daily=weather_code,temperature_2m_max,temperature_2m_min,wind_speed_10m_max,wind_direction_10m_dominant&temperature_unit=${unitTemp}&wind_speed_unit=${unitWind}&timezone=auto`;
+      url = `https://api.open-meteo.com/v1/forecast?latitude=${location.lat}&longitude=${location.lng}&start_date=${dateStr}&end_date=${dateStr}&daily=weather_code,temperature_2m_max,temperature_2m_min,wind_speed_10m_max,wind_direction_10m_dominant&temperature_unit=${unitTemp}&wind_speed_unit=${unitWind}&timezone=auto`;
     }
-    console.log(`DaySpark Weather: Fetching (${isArchive ? "Archive" : "Forecast"})`, url);
+    console.log(`DaySpark Weather: Fetching for ${location.name}`, url);
     try {
-      const response = await (0, import_obsidian2.requestUrl)({ url });
+      const response = await (0, import_obsidian3.requestUrl)({ url });
       const data = response.json;
       if (!data || !data.daily || !data.daily.time || data.daily.time.length === 0) {
-        console.warn("DaySpark: No weather data found.");
         return { items: [] };
       }
       const i = 0;
@@ -7954,10 +8040,11 @@ var WeatherProvider = class {
       const windDir = this.degreesToDirection(windDirDeg);
       const tempUnit = this.settings.useMetric ? "\xB0C" : "\xB0F";
       const windUnit = this.settings.useMetric ? "km/h" : "mph";
+      const locLine = `\u{1F4CD} **Location:** ${location.name}`;
       const weatherLine = `${wmo.emoji} **${wmo.label}:** High ${high}${tempUnit} / Low ${low}${tempUnit}`;
       const windLine = `\u{1F4A8} **Wind:** ${windSpeed} ${windUnit} ${windDir}`;
       return {
-        items: [weatherLine, windLine]
+        items: [locLine, weatherLine, windLine]
       };
     } catch (err) {
       console.error("DaySpark: Weather API Error", err);
@@ -8010,8 +8097,31 @@ var WeatherProvider = class {
   }
 };
 
+// src/providers/LocationProvider.ts
+var LocationProvider = class {
+  constructor(settings) {
+    this.id = "location-injector";
+    this.displayName = "Location Context";
+    this.targetHeader = "## My Location";
+    this.settings = settings;
+  }
+  async getDataForDate(date, fileContent) {
+    if (fileContent && /## My Location/i.test(fileContent)) {
+      return { items: [] };
+    }
+    let locationName = `${this.settings.latitude.toFixed(4)}, ${this.settings.longitude.toFixed(4)}`;
+    const friendlyName = await reverseGeocode(this.settings.latitude, this.settings.longitude);
+    if (friendlyName) {
+      locationName = friendlyName;
+    }
+    return {
+      items: [locationName]
+    };
+  }
+};
+
 // main.ts
-var DaySparkPlugin = class extends import_obsidian3.Plugin {
+var DaySparkPlugin = class extends import_obsidian4.Plugin {
   constructor() {
     super(...arguments);
     this.providers = [];
@@ -8031,6 +8141,7 @@ var DaySparkPlugin = class extends import_obsidian3.Plugin {
   }
   refreshProviders() {
     this.providers = [];
+    this.providers.push(new LocationProvider(this.settings));
     for (const group of this.settings.calendarGroups) {
       this.providers.push(new IcsProvider(this.app, group));
     }
@@ -8044,22 +8155,22 @@ var DaySparkPlugin = class extends import_obsidian3.Plugin {
   async activateMagic() {
     const activeFile = this.app.workspace.getActiveFile();
     if (!activeFile) {
-      new import_obsidian3.Notice("No active file.");
+      new import_obsidian4.Notice("No active file.");
       return;
     }
     const date = getDateFromFile(activeFile, this.app);
     if (!date) {
-      new import_obsidian3.Notice("Could not determine a date for this file.");
+      new import_obsidian4.Notice("Could not determine a date for this file.");
       return;
     }
-    new import_obsidian3.Notice(`DaySparking context for ${date.toDateString()}...`);
+    new import_obsidian4.Notice(`DaySparking context for ${date.toDateString()}...`);
     let currentContent = await this.app.vault.read(activeFile);
     let modificationsMade = false;
     for (const provider of this.providers) {
       try {
-        const result = await provider.getDataForDate(date);
+        const result = await provider.getDataForDate(date, currentContent);
         if (result.items.length > 0) {
-          const newContent = insertOrUpdateSection(currentContent, provider.targetHeader, result.items);
+          const newContent = insertOrUpdateSection(currentContent, provider.targetHeader, result.items, this.settings.replaceContext);
           if (newContent !== currentContent) {
             currentContent = newContent;
             modificationsMade = true;
@@ -8071,9 +8182,9 @@ var DaySparkPlugin = class extends import_obsidian3.Plugin {
     }
     if (modificationsMade) {
       await this.app.vault.modify(activeFile, currentContent);
-      new import_obsidian3.Notice("DaySpark updated your note!");
+      new import_obsidian4.Notice("DaySpark updated your note!");
     } else {
-      new import_obsidian3.Notice("DaySpark: No new items found to add.");
+      new import_obsidian4.Notice("DaySpark: No new items found to add.");
     }
   }
   async loadSettings() {
@@ -8101,7 +8212,7 @@ var DaySparkPlugin = class extends import_obsidian3.Plugin {
     this.refreshProviders();
   }
 };
-var DaySparkSettingTab = class extends import_obsidian3.PluginSettingTab {
+var DaySparkSettingTab = class extends import_obsidian4.PluginSettingTab {
   constructor(app, plugin) {
     super(app, plugin);
     this.plugin = plugin;
@@ -8111,70 +8222,73 @@ var DaySparkSettingTab = class extends import_obsidian3.PluginSettingTab {
     containerEl.empty();
     containerEl.createEl("h2", { text: "DaySpark Settings" });
     containerEl.createEl("h3", { text: "\u{1F30D} General Settings" });
-    new import_obsidian3.Setting(containerEl).setName("Latitude").setDesc("Used by Sun, Moon, Planets, and Weather.").addText((text) => text.setValue(String(this.plugin.settings.latitude)).onChange(async (value) => {
+    new import_obsidian4.Setting(containerEl).setName("Overwrite Sections").setDesc("If enabled, updating a note will replace existing data in DaySpark sections (e.g. Weather, Moon) instead of adding to it. Useful for updating location data.").addToggle((toggle) => toggle.setValue(this.plugin.settings.replaceContext).onChange(async (value) => {
+      this.plugin.settings.replaceContext = value;
+      await this.plugin.saveSettings();
+    }));
+    new import_obsidian4.Setting(containerEl).setName("Latitude").setDesc("Used by Sun, Moon, Planets, and Weather.").addText((text) => text.setValue(String(this.plugin.settings.latitude)).onChange(async (value) => {
       const num = parseFloat(value);
       if (!isNaN(num)) {
         this.plugin.settings.latitude = num;
         await this.plugin.saveSettings();
       }
     }));
-    new import_obsidian3.Setting(containerEl).setName("Longitude").setDesc("Used by Sun, Moon, Planets, and Weather.").addText((text) => text.setValue(String(this.plugin.settings.longitude)).onChange(async (value) => {
+    new import_obsidian4.Setting(containerEl).setName("Longitude").setDesc("Used by Sun, Moon, Planets, and Weather.").addText((text) => text.setValue(String(this.plugin.settings.longitude)).onChange(async (value) => {
       const num = parseFloat(value);
       if (!isNaN(num)) {
         this.plugin.settings.longitude = num;
         await this.plugin.saveSettings();
       }
     }));
-    new import_obsidian3.Setting(containerEl).setName("24-Hour Time").setDesc("Use 24-hour format (e.g. 14:30) instead of 12-hour (2:30 PM).").addToggle((toggle) => toggle.setValue(this.plugin.settings.use24HourFormat).onChange(async (value) => {
+    new import_obsidian4.Setting(containerEl).setName("24-Hour Time").setDesc("Use 24-hour format (e.g. 14:30).").addToggle((toggle) => toggle.setValue(this.plugin.settings.use24HourFormat).onChange(async (value) => {
       this.plugin.settings.use24HourFormat = value;
       await this.plugin.saveSettings();
     }));
     containerEl.createEl("hr");
     containerEl.createEl("h3", { text: "\u{1F326}\uFE0F Weather" });
-    new import_obsidian3.Setting(containerEl).setName("Enable Weather").setDesc("Fetch current forecast or historical weather.").addToggle((toggle) => toggle.setValue(this.plugin.settings.enableWeather).onChange(async (value) => {
+    new import_obsidian4.Setting(containerEl).setName("Enable Weather").setDesc("Fetch current forecast or historical weather.").addToggle((toggle) => toggle.setValue(this.plugin.settings.enableWeather).onChange(async (value) => {
       this.plugin.settings.enableWeather = value;
       await this.plugin.saveSettings();
     }));
-    new import_obsidian3.Setting(containerEl).setName("Use Metric Units").setDesc("Enable for Celsius/kmh. Disable for Fahrenheit/mph.").addToggle((toggle) => toggle.setValue(this.plugin.settings.useMetric).onChange(async (value) => {
+    new import_obsidian4.Setting(containerEl).setName("Use Metric Units").setDesc("Enable for Celsius/kmh. Disable for Fahrenheit/mph.").addToggle((toggle) => toggle.setValue(this.plugin.settings.useMetric).onChange(async (value) => {
       this.plugin.settings.useMetric = value;
       await this.plugin.saveSettings();
     }));
-    new import_obsidian3.Setting(containerEl).setName("Weather Header").addText((text) => text.setPlaceholder("## Weather").setValue(this.plugin.settings.weatherHeader).onChange(async (value) => {
+    new import_obsidian4.Setting(containerEl).setName("Weather Header").addText((text) => text.setPlaceholder("## Weather").setValue(this.plugin.settings.weatherHeader).onChange(async (value) => {
       this.plugin.settings.weatherHeader = value;
       await this.plugin.saveSettings();
     }));
     containerEl.createEl("hr");
     containerEl.createEl("h3", { text: "\u{1F4C5} Calendar Groups" });
-    containerEl.createEl("p", { text: "Create separate groups for different headers (e.g. Work, Personal, Astrology).", cls: "setting-item-description" });
     this.plugin.settings.calendarGroups.forEach((group, index) => {
       const div = containerEl.createDiv({ cls: "dayspark-group-box", attr: { style: "border: 1px solid var(--background-modifier-border); padding: 10px; margin-bottom: 10px; border-radius: 5px;" } });
-      const topSettings = new import_obsidian3.Setting(div).setName(`Group ${index + 1}`).addToggle((toggle) => toggle.setValue(group.enabled).setTooltip("Enable/Disable Group").onChange(async (val) => {
+      const topSettings = new import_obsidian4.Setting(div).setName(`Group ${index + 1}`).addToggle((toggle) => toggle.setValue(group.enabled).onChange(async (val) => {
         group.enabled = val;
         await this.plugin.saveSettings();
-      })).addExtraButton((btn) => btn.setIcon("trash").setTooltip("Delete Group").onClick(async () => {
+      })).addExtraButton((btn) => btn.setIcon("trash").onClick(async () => {
         this.plugin.settings.calendarGroups.splice(index, 1);
         await this.plugin.saveSettings();
         this.display();
       }));
       topSettings.nameEl.style.fontWeight = "bold";
-      new import_obsidian3.Setting(div).setName("Group Name").addText((text) => text.setValue(group.name).setPlaceholder("e.g. Work").onChange(async (val) => {
+      new import_obsidian4.Setting(div).setName("Group Name").addText((text) => text.setValue(group.name).onChange(async (val) => {
         group.name = val;
         await this.plugin.saveSettings();
       }));
-      new import_obsidian3.Setting(div).setName("Header").setDesc("Section name in your note.").addText((text) => text.setValue(group.header).setPlaceholder("## Agenda").onChange(async (val) => {
+      new import_obsidian4.Setting(div).setName("Header").addText((text) => text.setValue(group.header).onChange(async (val) => {
         group.header = val;
         await this.plugin.saveSettings();
       }));
-      new import_obsidian3.Setting(div).setName("Show Descriptions").setDesc("Include event details/notes.").addToggle((toggle) => toggle.setValue(group.showDescription).onChange(async (val) => {
+      new import_obsidian4.Setting(div).setName("Show Descriptions").addToggle((toggle) => toggle.setValue(group.showDescription).onChange(async (val) => {
         group.showDescription = val;
         await this.plugin.saveSettings();
       }));
-      new import_obsidian3.Setting(div).setName("ICS URLs / Paths").setDesc("One per line.").addTextArea((text) => text.setValue(group.urls.join("\n")).setPlaceholder("https://...").onChange(async (val) => {
+      new import_obsidian4.Setting(div).setName("ICS URLs").addTextArea((text) => text.setValue(group.urls.join("\n")).onChange(async (val) => {
         group.urls = val.split("\n").filter((u) => u.trim().length > 0);
         await this.plugin.saveSettings();
       }));
     });
-    new import_obsidian3.Setting(containerEl).addButton((btn) => btn.setButtonText("+ Add Calendar Group").setCta().onClick(async () => {
+    new import_obsidian4.Setting(containerEl).addButton((btn) => btn.setButtonText("+ Add Calendar Group").setCta().onClick(async () => {
       this.plugin.settings.calendarGroups.push({
         id: Date.now().toString(),
         name: "New Group",
@@ -8188,44 +8302,44 @@ var DaySparkSettingTab = class extends import_obsidian3.PluginSettingTab {
     }));
     containerEl.createEl("hr");
     containerEl.createEl("h3", { text: "\u{1F311} Moon Phase" });
-    new import_obsidian3.Setting(containerEl).setName("Enable Moon Phase").addToggle((toggle) => toggle.setValue(this.plugin.settings.enableMoon).onChange(async (value) => {
+    new import_obsidian4.Setting(containerEl).setName("Enable Moon Phase").addToggle((toggle) => toggle.setValue(this.plugin.settings.enableMoon).onChange(async (value) => {
       this.plugin.settings.enableMoon = value;
       await this.plugin.saveSettings();
     }));
-    new import_obsidian3.Setting(containerEl).setName("Moon Header").addText((text) => text.setPlaceholder("## Moon Phase").setValue(this.plugin.settings.moonHeader).onChange(async (value) => {
+    new import_obsidian4.Setting(containerEl).setName("Moon Header").addText((text) => text.setValue(this.plugin.settings.moonHeader).onChange(async (value) => {
       this.plugin.settings.moonHeader = value;
       await this.plugin.saveSettings();
     }));
     containerEl.createEl("h3", { text: "\u2600\uFE0F Sun Times" });
-    new import_obsidian3.Setting(containerEl).setName("Enable Sun Times").addToggle((toggle) => toggle.setValue(this.plugin.settings.enableSun).onChange(async (value) => {
+    new import_obsidian4.Setting(containerEl).setName("Enable Sun Times").addToggle((toggle) => toggle.setValue(this.plugin.settings.enableSun).onChange(async (value) => {
       this.plugin.settings.enableSun = value;
       await this.plugin.saveSettings();
     }));
-    new import_obsidian3.Setting(containerEl).setName("Sun Header").addText((text) => text.setPlaceholder("## Daily Context").setValue(this.plugin.settings.sunHeader).onChange(async (value) => {
+    new import_obsidian4.Setting(containerEl).setName("Sun Header").addText((text) => text.setValue(this.plugin.settings.sunHeader).onChange(async (value) => {
       this.plugin.settings.sunHeader = value;
       await this.plugin.saveSettings();
     }));
     containerEl.createEl("hr");
     containerEl.createEl("h3", { text: "\u{1FA90} Sky Watch (Planets)" });
-    new import_obsidian3.Setting(containerEl).setName("Enable Planet Watch").addToggle((toggle) => toggle.setValue(this.plugin.settings.enablePlanets).onChange(async (value) => {
+    new import_obsidian4.Setting(containerEl).setName("Enable Planet Watch").addToggle((toggle) => toggle.setValue(this.plugin.settings.enablePlanets).onChange(async (value) => {
       this.plugin.settings.enablePlanets = value;
       await this.plugin.saveSettings();
     }));
-    new import_obsidian3.Setting(containerEl).setName("Planet Header").addText((text) => text.setPlaceholder("## Sky Watch").setValue(this.plugin.settings.planetHeader).onChange(async (value) => {
+    new import_obsidian4.Setting(containerEl).setName("Planet Header").addText((text) => text.setValue(this.plugin.settings.planetHeader).onChange(async (value) => {
       this.plugin.settings.planetHeader = value;
       await this.plugin.saveSettings();
     }));
     containerEl.createEl("hr");
     containerEl.createEl("h3", { text: "\u{1F4DC} Seasons & Lore" });
-    new import_obsidian3.Setting(containerEl).setName("Enable Seasons").setDesc("Shows Equinoxes and Solstices.").addToggle((toggle) => toggle.setValue(this.plugin.settings.enableSeasons).onChange(async (value) => {
+    new import_obsidian4.Setting(containerEl).setName("Enable Seasons").addToggle((toggle) => toggle.setValue(this.plugin.settings.enableSeasons).onChange(async (value) => {
       this.plugin.settings.enableSeasons = value;
       await this.plugin.saveSettings();
     }));
-    new import_obsidian3.Setting(containerEl).setName("Enable Almanac Lore").addToggle((toggle) => toggle.setValue(this.plugin.settings.enableAlmanac).onChange(async (value) => {
+    new import_obsidian4.Setting(containerEl).setName("Enable Almanac Lore").addToggle((toggle) => toggle.setValue(this.plugin.settings.enableAlmanac).onChange(async (value) => {
       this.plugin.settings.enableAlmanac = value;
       await this.plugin.saveSettings();
     }));
-    new import_obsidian3.Setting(containerEl).setName("Almanac Header").addText((text) => text.setPlaceholder("## Almanac").setValue(this.plugin.settings.almanacHeader).onChange(async (value) => {
+    new import_obsidian4.Setting(containerEl).setName("Almanac Header").addText((text) => text.setValue(this.plugin.settings.almanacHeader).onChange(async (value) => {
       this.plugin.settings.almanacHeader = value;
       await this.plugin.saveSettings();
     }));

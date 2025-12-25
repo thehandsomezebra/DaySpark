@@ -1,4 +1,5 @@
 import { SparkProvider, ProviderResult, DaySparkSettings } from '../interfaces';
+import { resolveLocation } from '../utils';
 
 export class MoonProvider implements SparkProvider {
     id = 'moon-phase';
@@ -11,32 +12,36 @@ export class MoonProvider implements SparkProvider {
         if (this.settings.moonHeader) this.targetHeader = this.settings.moonHeader;
     }
 
-    async getDataForDate(targetDate: Date): Promise<ProviderResult> {
+    async getDataForDate(targetDate: Date, fileContent?: string): Promise<ProviderResult> {
         if (!this.settings.enableMoon) return { items: [] };
+
+        // Resolve Location (Dynamic or Default)
+        const location = await resolveLocation(this.settings, fileContent);
 
         // 1. MATCH ALMANAC POSITION: Calculate Constellation at UTC MIDNIGHT
         // Switching to UTC Midnight (00:00 UTC) aligns with standard astronomical almanacs.
         const utcMidnightDate = new Date(targetDate);
         utcMidnightDate.setUTCHours(0, 0, 0, 0);
 
-        const moonPosMidnight = this.getMoonPosition(utcMidnightDate, this.settings.latitude, this.settings.longitude);
+        const moonPosMidnight = this.getMoonPosition(utcMidnightDate, location.lat, location.lng);
         
-        // SIDEREAL ADJUSTMENT REMOVED: IAU Boundaries are J2000 Tropical.
+        // IAU Constellation boundaries (J2000 Tropical)
         const zodiac = this.getAstronomicalConstellation(moonPosMidnight.eclipticLongitude, moonPosMidnight.eclipticLatitude);
         
         // 2. PHASE (Noon - for visual percentage)
         const noonDate = new Date(targetDate);
         noonDate.setHours(12, 0, 0, 0);
-        const moonPosNoon = this.getMoonPosition(noonDate, this.settings.latitude, this.settings.longitude);
+        const moonPosNoon = this.getMoonPosition(noonDate, location.lat, location.lng);
         const sunPosNoon = this.getSunPosition(noonDate);
         const phaseData = this.calculatePhase(moonPosNoon.eclipticLongitude, sunPosNoon.eclipticLongitude);
         
         // 3. MATCH ALMANAC AGE: Calendar Day Difference
+        // Find the date of the previous New Moon and count days elapsed on the calendar.
         const prevNewMoonDate = this.findPreviousNewMoon(noonDate);
         const age = this.getCalendarDayDifference(prevNewMoonDate, utcMidnightDate);
 
         // 4. Rise/Set (Local)
-        const times = this.getMoonTimes(targetDate, this.settings.latitude, this.settings.longitude);
+        const times = this.getMoonTimes(targetDate, location.lat, location.lng);
 
         const items = [
             `${phaseData.emoji} **Phase:** ${phaseData.name} (${phaseData.illumination}%)`,
@@ -166,22 +171,17 @@ export class MoonProvider implements SparkProvider {
     }
 
     // --- CONSTELLATION MAPPING ---
-    // NOTE: This uses simplified longitudinal slices to approximate the IAU constellation boundaries.
-    // Real constellation boundaries are complex polygons defined in 1875 Equatorial coordinates.
-    // Because of this "Irregular Border" (as the Almanac notes), the Moon may be in a specific 
-    // "corner" of a constellation that this simple longitude check misses on border days.
-    // This method is ~98% accurate but may differ from the Almanac on transition days.
     private getAstronomicalConstellation(lon: number, lat: number) {
         let l = lon % 360;
         if (l < 0) l += 360;
 
-        // 1. CHECK "INTRUDERS"
+        // 1. CHECK "INTRUDERS" (Almanac specifics)
         if (l >= 5 && l <= 25 && lat < -3.5) return { name: "Cetus", symbol: "🐋" };
         if (l >= 84 && l <= 91 && lat < -0.5) return { name: "Orion", symbol: "🏹" };
         if (l >= 80 && l <= 95 && lat > 4.5) return { name: "Auriga", symbol: "🐐" };
         if (l >= 143 && l <= 155 && lat < -2.5) return { name: "Sextans", symbol: "🧭" };
 
-        // 2. CHECK STANDARD ZODIAC
+        // 2. CHECK STANDARD ZODIAC (IAU Boundaries)
         if (l >= 351.5 || l < 29.0) return { name: "Pisces", symbol: "♓" };
         if (l < 53.5)  return { name: "Aries", symbol: "♈" };
         if (l < 90.0)  return { name: "Taurus", symbol: "♉" };

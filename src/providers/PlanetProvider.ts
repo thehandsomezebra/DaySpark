@@ -1,4 +1,5 @@
 import { SparkProvider, ProviderResult, DaySparkSettings } from '../interfaces';
+import { resolveLocation } from '../utils';
 
 export class PlanetProvider implements SparkProvider {
     id = 'planet-watch';
@@ -11,15 +12,18 @@ export class PlanetProvider implements SparkProvider {
         if (this.settings.planetHeader) this.targetHeader = this.settings.planetHeader;
     }
 
-    async getDataForDate(targetDate: Date): Promise<ProviderResult> {
+    async getDataForDate(targetDate: Date, fileContent?: string): Promise<ProviderResult> {
         if (!this.settings.enablePlanets) return { items: [] };
+
+        // Resolve Location
+        const location = await resolveLocation(this.settings, fileContent);
 
         const items: string[] = [];
         const noonDate = new Date(targetDate);
         noonDate.setHours(12, 0, 0, 0);
 
-        // Get Sun times for visibility context
-        const sunTimes = this.getSunTimes(noonDate, this.settings.latitude, this.settings.longitude);
+        // Get Sun times based on Resolved Location
+        const sunTimes = this.getSunTimes(noonDate, location.lat, location.lng);
         const sunPos = this.getSunPosition(noonDate); 
 
         if (!sunTimes.rise || !sunTimes.set || !sunTimes.riseDate || !sunTimes.setDate) return { items: [] };
@@ -37,13 +41,11 @@ export class PlanetProvider implements SparkProvider {
         ];
 
         for (const planet of planets) {
-            // 1. Calculate Position & Times
             const pPos = this.getPlanetPosition(noonDate, planet.id);
-            const times = this.calcRiseSet(noonDate, this.settings.latitude, this.settings.longitude, pPos.ra, pPos.dec);
+            const times = this.calcRiseSet(noonDate, location.lat, location.lng, pPos.ra, pPos.dec);
             
             if (!times.rise || !times.set || !times.riseDate || !times.setDate) continue;
 
-            // 2. Check Elongation (Too close to Sun?)
             const elong = this.calculateElongation(pPos.eclipticLon, pPos.eclipticLat, sunPos.lon);
             if (elong < 10) { 
                 items.push(`${planet.symbol} **${planet.name}:** Not visible (Too close to Sun)`);
@@ -54,43 +56,28 @@ export class PlanetProvider implements SparkProvider {
             const pSet = times.setDate.getTime();
             let status = "";
 
-            // 3. Refined Visibility Logic
-            // We define "Night" as the period between SunSet and SunRiseNext.
-            
-            // CASE A: Sets AFTER SunRiseNext (Up all night or most of it)
+            // Visibility Logic Buckets
             if (pSet > sunRiseNext) {
-                // If it rose roughly around/before Sunset, it's "All Night"
                 if (pRise < sunSet + (60*60000)) { 
                     status = `Visible All Night`;
                 } else {
                     status = `Visible Most of Night (Rises ${times.rise})`;
                 }
             }
-            // CASE B: Sets DURING the night (Between Sunset and SunriseNext)
             else if (pSet > sunSet && pSet < sunRiseNext) {
-                // If it rose during the day, it's already up at sunset
                 if (pRise < sunSet) {
-                    // Logic for "Beginning of night" vs "Evening"
-                    // If it sets before midnight (approx), clarify "Visible until..."
                     status = `Visible until ${times.set}`;
                 } else {
-                    // It rose and set during the night (short window)
                     status = `Visible Tonight (Sets ${times.set})`;
                 }
             }
-            // CASE C: Rises DURING the night (Before SunriseNext)
-            // (And sets AFTER SunriseNext - covered by Case A, or sets during day)
             else if (pRise > sunSet && pRise < sunRiseNext) {
                 status = `Visible in Morning (Rises ${times.rise})`;
             }
-            // CASE D: Up during day (Rises after Sunrise, Sets before Sunset)
             else {
                 status = `Not visible (Up during day)`;
             }
 
-            // 4. "Difficult" Check (Twilight Glare)
-            // If rising within ~1.5 hours of sunrise OR setting within ~1.5 hours of sunset
-            // (Increased from 1h to match observational difficulty better)
             const isHardRise = (Math.abs(pRise - sunRiseNext) < 90*60000); 
             const isHardSet = (Math.abs(pSet - sunSet) < 90*60000);
             
@@ -104,27 +91,20 @@ export class PlanetProvider implements SparkProvider {
         return { items };
     }
 
-    // --- ASTRONOMY MATH ---
+    // --- ASTRONOMY MATH (Keplerian Elements) ---
 
     private calculateElongation(pLon: number, pLat: number, sLon: number): number {
         const rad = Math.PI / 180;
         let dLon = (pLon - sLon);
-        // Normalize dLon
         while (dLon < -180) dLon += 360;
         while (dLon > 180) dLon -= 360;
-        
         const lat = pLat;
-        // Cosine rule for spherical triangle
-        // cos(E) = sin(lat1)sin(lat2) + cos(lat1)cos(lat2)cos(dLon)
-        // Here lat1=0 (Sun), lat2=pLat. sin(0)=0, cos(0)=1.
-        // cos(E) = cos(pLat)*cos(dLon)
         return Math.acos(Math.cos(lat*rad) * Math.cos(dLon*rad)) * (180/Math.PI);
     }
 
     private getPlanetPosition(date: Date, planet: string) {
         const d = (date.getTime() / 86400000) - 10957.5; 
         const rad = Math.PI / 180;
-
         const elems: any = {
             mercury: { N: 48.3313, i: 7.0047, w: 29.1241, a: 0.387098, e: 0.205635, M: 168.6562 + 4.0923344368 * d },
             venus:   { N: 76.6799, i: 3.3946, w: 54.8910, a: 0.723330, e: 0.006773, M: 48.0052 + 1.6021302244 * d },
@@ -132,9 +112,8 @@ export class PlanetProvider implements SparkProvider {
             jupiter: { N: 100.4542, i: 1.3030, w: 273.8777, a: 5.202561, e: 0.048498, M: 19.8950 + 0.0830853001 * d },
             saturn:  { N: 113.6634, i: 2.4886, w: 339.3939, a: 9.55475, e: 0.055546, M: 316.9670 + 0.0334442282 * d }
         };
-
         const p = elems[planet];
-
+        
         // 1. Eccentric Anomaly
         let E = p.M + (180/Math.PI) * p.e * Math.sin(p.M * rad) * (1 + p.e * Math.cos(p.M * rad));
         for(let j=0; j<5; j++) {
@@ -142,49 +121,42 @@ export class PlanetProvider implements SparkProvider {
             const M_calc = E - (180/Math.PI) * p.e * Math.sin(E_rad);
             E = E + (p.M - M_calc);
         }
-
+        
         // 2. Heliocentric coordinates
         const xv = p.a * (Math.cos(E * rad) - p.e);
         const yv = p.a * Math.sqrt(1 - p.e*p.e) * Math.sin(E * rad);
-        const v = Math.atan2(yv, xv) * (180/Math.PI); 
         const r = Math.sqrt(xv*xv + yv*yv); 
-
+        
         // 3. Heliocentric Ecliptic coordinates
-        const xh = r * (Math.cos(p.N*rad) * Math.cos((v+p.w)*rad) - Math.sin(p.N*rad) * Math.sin((v+p.w)*rad) * Math.cos(p.i*rad));
-        const yh = r * (Math.sin(p.N*rad) * Math.cos((v+p.w)*rad) + Math.cos(p.N*rad) * Math.sin((v+p.w)*rad) * Math.cos(p.i*rad));
-        const zh = r * (Math.sin((v+p.w)*rad) * Math.sin(p.i*rad));
-
-        // 4. Earth Position (Sun Geocentric)
+        const xh = r * (Math.cos(p.N*rad) * Math.cos((p.w + Math.atan2(yv, xv) * (180/Math.PI))*rad) - Math.sin(p.N*rad) * Math.sin((p.w + Math.atan2(yv, xv) * (180/Math.PI))*rad) * Math.cos(p.i*rad));
+        const yh = r * (Math.sin(p.N*rad) * Math.cos((p.w + Math.atan2(yv, xv) * (180/Math.PI))*rad) + Math.cos(p.N*rad) * Math.sin((p.w + Math.atan2(yv, xv) * (180/Math.PI))*rad) * Math.cos(p.i*rad));
+        const zh = r * (Math.sin((p.w + Math.atan2(yv, xv) * (180/Math.PI))*rad) * Math.sin(p.i*rad));
+        
+        // 4. Earth Position
         const Me = 357.529 + 0.98560028 * d;
         const Le = 280.466 + 0.98564736 * d;
         const le = Le + 1.915 * Math.sin(Me*rad) + 0.020 * Math.sin(2*Me*rad);
         const Re = 1.00014 - 0.01671 * Math.cos(Me*rad) - 0.00014 * Math.cos(2*Me*rad);
-        
-        // xe/ye here represent the Sun's position relative to Earth
         const xe = Re * Math.cos(le*rad);
         const ye = Re * Math.sin(le*rad);
         const ze = 0;
-
+        
         // 5. Geocentric coordinates (Planet from Earth)
-        // Vector Planet-Earth = Vector Planet-Sun + Vector Sun-Earth
-        // xh/yh/zh is Planet from Sun. xe/ye is Sun from Earth.
-        // So we ADD them. (Previous subtraction was the bug!)
         const xg = xh + xe;
         const yg = yh + ye;
         const zg = zh + ze;
-
+        
         // 6. Equatorial coordinates
         const obl = 23.439 * rad;
         const xeq = xg;
         const yeq = yg * Math.cos(obl) - zg * Math.sin(obl);
         const zeq = yg * Math.sin(obl) + zg * Math.cos(obl);
-
+        
         const ra = Math.atan2(yeq, xeq);
         const dec = Math.atan2(zeq, Math.sqrt(xeq*xeq + yeq*yeq));
-        
         const eclipticLon = Math.atan2(yg, xg) * (180/Math.PI);
         const eclipticLat = Math.atan2(zg, Math.sqrt(xg*xg + yg*yg)) * (180/Math.PI);
-
+        
         return { ra, dec, eclipticLon, eclipticLat };
     }
 
@@ -225,7 +197,6 @@ export class PlanetProvider implements SparkProvider {
         const riseDate = new Date(utcMidnight.getTime() + rise_UTC * 3600000);
         const setDate = new Date(utcMidnight.getTime() + set_UTC * 3600000);
         
-        // Ensure setDate follows riseDate roughly for the "event" logic
         if (setDate < riseDate) {
             setDate.setDate(setDate.getDate() + 1);
         }
