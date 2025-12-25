@@ -19,28 +19,41 @@ export class MoonProvider implements SparkProvider {
         const location = await resolveLocation(this.settings, fileContent);
 
         // 1. MATCH ALMANAC POSITION: Calculate Constellation at UTC MIDNIGHT
-        // Switching to UTC Midnight (00:00 UTC) aligns with standard astronomical almanacs.
+        // Standard Almanacs (like the Farmer's Almanac) list the "Astronomical Position"
+        // of the Moon at 00:00 UTC (Universal Time). 
+        // This is important because the Moon moves ~13 degrees/day. Calculating this at 
+        // local time (e.g. EST) would shift the position by several degrees, causing
+        // the sign to flip too early or too late.
         const utcMidnightDate = new Date(targetDate);
         utcMidnightDate.setUTCHours(0, 0, 0, 0);
 
         const moonPosMidnight = this.getMoonPosition(utcMidnightDate, location.lat, location.lng);
         
-        // IAU Constellation boundaries (J2000 Tropical)
+        // 2. CONSTELLATION BOUNDARIES (IAU / J2000)
+        // We use the International Astronomical Union (IAU) boundaries.
+        // History: These boundaries were defined by Eugène Delporte in 1930 along lines of 
+        // Right Ascension and Declination for the epoch B1875.0.
+        // However, for calculation purposes, we map these to J2000 Tropical Coordinates.
+        // Unlike the Sidereal Zodiac (which shifts with precession), these boundaries are fixed 
+        // relative to the equinox, meaning we DO NOT subtract the Ayanamsha (24° offset).
         const zodiac = this.getAstronomicalConstellation(moonPosMidnight.eclipticLongitude, moonPosMidnight.eclipticLatitude);
         
-        // 2. PHASE (Noon - for visual percentage)
+        // 3. PHASE (Noon - for visual percentage)
+        // We calculate visual phase at Noon so it represents the "middle" of the day.
         const noonDate = new Date(targetDate);
         noonDate.setHours(12, 0, 0, 0);
         const moonPosNoon = this.getMoonPosition(noonDate, location.lat, location.lng);
         const sunPosNoon = this.getSunPosition(noonDate);
         const phaseData = this.calculatePhase(moonPosNoon.eclipticLongitude, sunPosNoon.eclipticLongitude);
         
-        // 3. MATCH ALMANAC AGE: Calendar Day Difference
-        // Find the date of the previous New Moon and count days elapsed on the calendar.
+        // 4. MATCH ALMANAC AGE: Calendar Day Difference
+        // The Almanac simply counts the days starting from the New Moon (Day 0).
+        // It does not care about the precise hour. If New Moon was Dec 19, then Dec 25 is Day 6.
+        // We replicate this by finding the date of the previous New Moon and diffing the calendar days.
         const prevNewMoonDate = this.findPreviousNewMoon(noonDate);
         const age = this.getCalendarDayDifference(prevNewMoonDate, utcMidnightDate);
 
-        // 4. Rise/Set (Local)
+        // 5. Rise/Set (Local)
         const times = this.getMoonTimes(targetDate, location.lat, location.lng);
 
         const items = [
@@ -71,9 +84,11 @@ export class MoonProvider implements SparkProvider {
             while (diff < -180) diff += 360;
             while (diff > 180) diff -= 360;
             
-            // Force it to look backwards if we are "ahead" of the sun
+            // If we are "ahead" of the sun (positive), go back.
+            // If we are "behind" (negative), we went too far back or started behind.
             if (i === 0 && diff < 0) diff += 360; 
 
+            // Approximate rate: Moon moves ~13.17 deg/day, Sun ~0.985 deg/day. Relative ~12.19 deg/day.
             const daysCorrection = diff / 12.1907;
             t = new Date(t.getTime() - (daysCorrection * 86400000));
             
@@ -83,7 +98,6 @@ export class MoonProvider implements SparkProvider {
     }
 
     private getCalendarDayDifference(d1: Date, d2: Date): number {
-        // Create new date objects to avoid mutating
         const date1 = new Date(d1);
         const date2 = new Date(d2);
         
@@ -102,24 +116,32 @@ export class MoonProvider implements SparkProvider {
         const rad = Math.PI / 180;
 
         // Mean elements
-        const L = (218.316 + 13.176396 * d) * rad;
-        const M = (134.963 + 13.064993 * d) * rad;
-        const F = (93.272 + 13.229350 * d) * rad;
-        const D = (297.850 + 12.190749 * d) * rad; 
-        const Ms = (357.529 + 0.98560028 * d) * rad;
+        const L = (218.316 + 13.176396 * d) * rad; // Mean Longitude
+        const M = (134.963 + 13.064993 * d) * rad; // Mean Anomaly
+        const F = (93.272 + 13.229350 * d) * rad;  // Argument of Latitude
+        const D = (297.850 + 12.190749 * d) * rad; // Elongation
+        const Ms = (357.529 + 0.98560028 * d) * rad; // Sun Anomaly
 
-        // Perturbations
+        // --- LONGITUDE PERTURBATIONS (The "Wobble" Fixes) ---
+        // 1. Equation of the Center (Major Ellipse term)
         let l = L + 6.289 * rad * Math.sin(M);
+        // 2. Evection (Sun's gravity distorting orbit)
         l += 1.274 * rad * Math.sin(2 * D - M);
+        // 3. Variation (Speed up/slow down towards Sun)
         l += 0.658 * rad * Math.sin(2 * D);
+        // 4. Annual Equation
         l += -0.185 * rad * Math.sin(Ms);
+        // 5. Smaller terms for precision
         l += -0.114 * rad * Math.sin(2 * F);
 
+        // --- LATITUDE PERTURBATIONS ---
+        // We need 'b' (Latitude) to detect if moon visits Cetus, Orion, etc.
         let b = 5.128 * rad * Math.sin(F);
         b += 0.280 * rad * Math.sin(M + F);
         b += 0.278 * rad * Math.sin(M - F);
         b += 0.173 * rad * Math.sin(2 * D - F);
 
+        // Calculate RA/Dec
         const obl = 23.439 * rad;
         const sinDec = Math.sin(b) * Math.cos(obl) + Math.cos(b) * Math.sin(obl) * Math.sin(l);
         const cosDec = Math.sqrt(1 - sinDec * sinDec);
@@ -170,18 +192,31 @@ export class MoonProvider implements SparkProvider {
         };
     }
 
-    // --- CONSTELLATION MAPPING ---
+    // --- CONSTELLATION MAPPING (IAU / Almanac Specifics) ---
+    // The Almanac explicitly states:
+    // "Constellations have irregular borders; on successive nights, the midnight Moon may enter one,
+    // cross into another, and then move to a new area of the previous."
+    //
+    // This method approximates those complex polygon borders using longitude slices and
+    // latitude checks for the "intruder" constellations (Cetus, Orion, Auriga, Sextans).
     private getAstronomicalConstellation(lon: number, lat: number) {
         let l = lon % 360;
         if (l < 0) l += 360;
 
-        // 1. CHECK "INTRUDERS" (Almanac specifics)
+        // 1. CHECK "INTRUDERS" (Off-Ecliptic Constellations)
+        // Cetus (CET): South of Pisces/Aries (~5-25 deg lon, Lat < -3)
         if (l >= 5 && l <= 25 && lat < -3.5) return { name: "Cetus", symbol: "🐋" };
+        
+        // Orion (ORI): Near Taurus/Gemini border (~85-90 deg, Lat < -0.5)
         if (l >= 84 && l <= 91 && lat < -0.5) return { name: "Orion", symbol: "🏹" };
+        
+        // Auriga (AUR): North of Taurus (~80-95 deg, Lat > +4)
         if (l >= 80 && l <= 95 && lat > 4.5) return { name: "Auriga", symbol: "🐐" };
+        
+        // Sextans (SEX): South of Leo (~145-155 deg, Lat < -3)
         if (l >= 143 && l <= 155 && lat < -2.5) return { name: "Sextans", symbol: "🧭" };
 
-        // 2. CHECK STANDARD ZODIAC (IAU Boundaries)
+        // 2. CHECK STANDARD ZODIAC (IAU Boundaries J2000)
         if (l >= 351.5 || l < 29.0) return { name: "Pisces", symbol: "♓" };
         if (l < 53.5)  return { name: "Aries", symbol: "♈" };
         if (l < 90.0)  return { name: "Taurus", symbol: "♉" };
@@ -191,7 +226,7 @@ export class MoonProvider implements SparkProvider {
         if (l < 218.0) return { name: "Virgo", symbol: "♍" };
         if (l < 241.0) return { name: "Libra", symbol: "♎" };
         if (l < 248.0) return { name: "Scorpius", symbol: "♏" };
-        if (l < 266.0) return { name: "Ophiuchus", symbol: "⛎" };
+        if (l < 266.0) return { name: "Ophiuchus", symbol: "⛎" }; // The 13th!
         if (l < 299.5) return { name: "Sagittarius", symbol: "♐" };
         if (l < 327.5) return { name: "Capricornus", symbol: "♑" };
         if (l < 351.5) return { name: "Aquarius", symbol: "♒" };
@@ -208,6 +243,7 @@ export class MoonProvider implements SparkProvider {
         const startOfDay = new Date(date);
         startOfDay.setHours(0,0,0,0);
         
+        // Horizon correction for refraction/moon radius
         const h0 = 0.125 * Math.PI / 180; 
 
         const getAlt = (t: Date) => {
@@ -225,6 +261,7 @@ export class MoonProvider implements SparkProvider {
 
         let prevAlt = getAlt(startOfDay);
         
+        // Scan 30 hours to catch moonsets just after midnight
         for (let i = 1; i <= 180; i++) {
             const time = new Date(startOfDay.getTime() + (i * 10 * 60 * 1000));
             const alt = getAlt(time);
