@@ -34,7 +34,6 @@ export interface DaySparkSettings {
     // Location Settings
     latitude: number;
     longitude: number;
-    // defaultLocationName REMOVED - Auto-calculated now
     use24HourFormat: boolean;
 
     // Almanac Settings
@@ -52,6 +51,11 @@ export interface DaySparkSettings {
     enableWeather: boolean;
     weatherHeader: string;
     useMetric: boolean;
+
+    // History Settings
+    enableHistory: boolean;
+    historyHeader: string;
+    historyLimit: number; // NEW: Limit for history events
 
     // General Behavior
     replaceContext: boolean;
@@ -83,5 +87,8 @@ export const DEFAULT_SETTINGS: DaySparkSettings = {
     enableWeather: true,
     weatherHeader: '## Weather',
     useMetric: false,
+    enableHistory: true, 
+    historyHeader: '## On This Day',
+    historyLimit: 5, // Default to 5
     replaceContext: true
 };

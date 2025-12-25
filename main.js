@@ -7014,7 +7014,7 @@ __export(main_exports, {
   default: () => DaySparkPlugin
 });
 module.exports = __toCommonJS(main_exports);
-var import_obsidian4 = require("obsidian");
+var import_obsidian5 = require("obsidian");
 
 // src/interfaces.ts
 var DEFAULT_SETTINGS = {
@@ -7043,6 +7043,10 @@ var DEFAULT_SETTINGS = {
   enableWeather: true,
   weatherHeader: "## Weather",
   useMetric: false,
+  enableHistory: true,
+  historyHeader: "## On This Day",
+  historyLimit: 5,
+  // Default to 5
   replaceContext: true
 };
 
@@ -8120,8 +8124,51 @@ var LocationProvider = class {
   }
 };
 
+// src/providers/HistoryProvider.ts
+var import_obsidian4 = require("obsidian");
+var HistoryProvider = class {
+  constructor(settings) {
+    this.id = "history-events";
+    this.displayName = "On This Day";
+    this.targetHeader = "## On This Day";
+    this.settings = settings;
+    if (this.settings.historyHeader)
+      this.targetHeader = this.settings.historyHeader;
+  }
+  async getDataForDate(targetDate, fileContent) {
+    if (!this.settings.enableHistory)
+      return { items: [] };
+    const month = String(targetDate.getMonth() + 1).padStart(2, "0");
+    const day = String(targetDate.getDate()).padStart(2, "0");
+    const url = `https://api.wikimedia.org/feed/v1/wikipedia/en/onthisday/selected/${month}/${day}`;
+    console.log(`DaySpark History: Fetching ${url}`);
+    try {
+      const response = await (0, import_obsidian4.requestUrl)({
+        url,
+        headers: { "User-Agent": "DaySpark-Obsidian-Plugin/1.0" }
+      });
+      if (response.status !== 200)
+        return { items: [] };
+      const data = JSON.parse(response.text);
+      if (!data || !data.selected || data.selected.length === 0) {
+        return { items: [] };
+      }
+      const items = [];
+      const limit = this.settings.historyLimit || 5;
+      const events = data.selected.slice(0, limit);
+      for (const event of events) {
+        items.push(`\u{1F4DC} **${event.year}:** ${event.text}`);
+      }
+      return { items };
+    } catch (err) {
+      console.error("DaySpark: History API Error", err);
+      return { items: [] };
+    }
+  }
+};
+
 // main.ts
-var DaySparkPlugin = class extends import_obsidian4.Plugin {
+var DaySparkPlugin = class extends import_obsidian5.Plugin {
   constructor() {
     super(...arguments);
     this.providers = [];
@@ -8151,19 +8198,20 @@ var DaySparkPlugin = class extends import_obsidian4.Plugin {
     this.providers.push(new PlanetProvider(this.settings));
     this.providers.push(new SeasonProvider(this.settings));
     this.providers.push(new AlmanacProvider(this.settings));
+    this.providers.push(new HistoryProvider(this.settings));
   }
   async activateMagic() {
     const activeFile = this.app.workspace.getActiveFile();
     if (!activeFile) {
-      new import_obsidian4.Notice("No active file.");
+      new import_obsidian5.Notice("No active file.");
       return;
     }
     const date = getDateFromFile(activeFile, this.app);
     if (!date) {
-      new import_obsidian4.Notice("Could not determine a date for this file.");
+      new import_obsidian5.Notice("Could not determine a date for this file.");
       return;
     }
-    new import_obsidian4.Notice(`DaySparking context for ${date.toDateString()}...`);
+    new import_obsidian5.Notice(`DaySparking context for ${date.toDateString()}...`);
     let currentContent = await this.app.vault.read(activeFile);
     let modificationsMade = false;
     for (const provider of this.providers) {
@@ -8182,9 +8230,9 @@ var DaySparkPlugin = class extends import_obsidian4.Plugin {
     }
     if (modificationsMade) {
       await this.app.vault.modify(activeFile, currentContent);
-      new import_obsidian4.Notice("DaySpark updated your note!");
+      new import_obsidian5.Notice("DaySpark updated your note!");
     } else {
-      new import_obsidian4.Notice("DaySpark: No new items found to add.");
+      new import_obsidian5.Notice("DaySpark: No new items found to add.");
     }
   }
   async loadSettings() {
@@ -8212,7 +8260,7 @@ var DaySparkPlugin = class extends import_obsidian4.Plugin {
     this.refreshProviders();
   }
 };
-var DaySparkSettingTab = class extends import_obsidian4.PluginSettingTab {
+var DaySparkSettingTab = class extends import_obsidian5.PluginSettingTab {
   constructor(app, plugin) {
     super(app, plugin);
     this.plugin = plugin;
@@ -8222,73 +8270,62 @@ var DaySparkSettingTab = class extends import_obsidian4.PluginSettingTab {
     containerEl.empty();
     containerEl.createEl("h2", { text: "DaySpark Settings" });
     containerEl.createEl("h3", { text: "\u{1F30D} General Settings" });
-    new import_obsidian4.Setting(containerEl).setName("Overwrite Sections").setDesc("If enabled, updating a note will replace existing data in DaySpark sections (e.g. Weather, Moon) instead of adding to it. Useful for updating location data.").addToggle((toggle) => toggle.setValue(this.plugin.settings.replaceContext).onChange(async (value) => {
-      this.plugin.settings.replaceContext = value;
+    new import_obsidian5.Setting(containerEl).setName("Overwrite Sections").setDesc("If enabled, DaySpark will update existing sections instead of appending.").addToggle((toggle) => toggle.setValue(this.plugin.settings.replaceContext).onChange(async (val) => {
+      this.plugin.settings.replaceContext = val;
       await this.plugin.saveSettings();
     }));
-    new import_obsidian4.Setting(containerEl).setName("Latitude").setDesc("Used by Sun, Moon, Planets, and Weather.").addText((text) => text.setValue(String(this.plugin.settings.latitude)).onChange(async (value) => {
-      const num = parseFloat(value);
-      if (!isNaN(num)) {
-        this.plugin.settings.latitude = num;
-        await this.plugin.saveSettings();
-      }
+    new import_obsidian5.Setting(containerEl).setName("Latitude").addText((text) => text.setValue(String(this.plugin.settings.latitude)).onChange(async (val) => {
+      this.plugin.settings.latitude = parseFloat(val);
+      await this.plugin.saveSettings();
     }));
-    new import_obsidian4.Setting(containerEl).setName("Longitude").setDesc("Used by Sun, Moon, Planets, and Weather.").addText((text) => text.setValue(String(this.plugin.settings.longitude)).onChange(async (value) => {
-      const num = parseFloat(value);
-      if (!isNaN(num)) {
-        this.plugin.settings.longitude = num;
-        await this.plugin.saveSettings();
-      }
+    new import_obsidian5.Setting(containerEl).setName("Longitude").addText((text) => text.setValue(String(this.plugin.settings.longitude)).onChange(async (val) => {
+      this.plugin.settings.longitude = parseFloat(val);
+      await this.plugin.saveSettings();
     }));
-    new import_obsidian4.Setting(containerEl).setName("24-Hour Time").setDesc("Use 24-hour format (e.g. 14:30).").addToggle((toggle) => toggle.setValue(this.plugin.settings.use24HourFormat).onChange(async (value) => {
-      this.plugin.settings.use24HourFormat = value;
+    new import_obsidian5.Setting(containerEl).setName("24-Hour Time").addToggle((toggle) => toggle.setValue(this.plugin.settings.use24HourFormat).onChange(async (val) => {
+      this.plugin.settings.use24HourFormat = val;
       await this.plugin.saveSettings();
     }));
     containerEl.createEl("hr");
     containerEl.createEl("h3", { text: "\u{1F326}\uFE0F Weather" });
-    new import_obsidian4.Setting(containerEl).setName("Enable Weather").setDesc("Fetch current forecast or historical weather.").addToggle((toggle) => toggle.setValue(this.plugin.settings.enableWeather).onChange(async (value) => {
-      this.plugin.settings.enableWeather = value;
+    new import_obsidian5.Setting(containerEl).setName("Enable Weather").addToggle((toggle) => toggle.setValue(this.plugin.settings.enableWeather).onChange(async (val) => {
+      this.plugin.settings.enableWeather = val;
       await this.plugin.saveSettings();
     }));
-    new import_obsidian4.Setting(containerEl).setName("Use Metric Units").setDesc("Enable for Celsius/kmh. Disable for Fahrenheit/mph.").addToggle((toggle) => toggle.setValue(this.plugin.settings.useMetric).onChange(async (value) => {
-      this.plugin.settings.useMetric = value;
+    new import_obsidian5.Setting(containerEl).setName("Use Metric Units").addToggle((toggle) => toggle.setValue(this.plugin.settings.useMetric).onChange(async (val) => {
+      this.plugin.settings.useMetric = val;
       await this.plugin.saveSettings();
     }));
-    new import_obsidian4.Setting(containerEl).setName("Weather Header").addText((text) => text.setPlaceholder("## Weather").setValue(this.plugin.settings.weatherHeader).onChange(async (value) => {
-      this.plugin.settings.weatherHeader = value;
+    new import_obsidian5.Setting(containerEl).setName("Weather Header").addText((text) => text.setValue(this.plugin.settings.weatherHeader).onChange(async (val) => {
+      this.plugin.settings.weatherHeader = val;
       await this.plugin.saveSettings();
     }));
     containerEl.createEl("hr");
     containerEl.createEl("h3", { text: "\u{1F4C5} Calendar Groups" });
     this.plugin.settings.calendarGroups.forEach((group, index) => {
       const div = containerEl.createDiv({ cls: "dayspark-group-box", attr: { style: "border: 1px solid var(--background-modifier-border); padding: 10px; margin-bottom: 10px; border-radius: 5px;" } });
-      const topSettings = new import_obsidian4.Setting(div).setName(`Group ${index + 1}`).addToggle((toggle) => toggle.setValue(group.enabled).onChange(async (val) => {
-        group.enabled = val;
+      new import_obsidian5.Setting(div).setName(`Group ${index + 1}`).addToggle((t) => t.setValue(group.enabled).onChange(async (v) => {
+        group.enabled = v;
         await this.plugin.saveSettings();
-      })).addExtraButton((btn) => btn.setIcon("trash").onClick(async () => {
+      })).addExtraButton((b) => b.setIcon("trash").onClick(async () => {
         this.plugin.settings.calendarGroups.splice(index, 1);
         await this.plugin.saveSettings();
         this.display();
       }));
-      topSettings.nameEl.style.fontWeight = "bold";
-      new import_obsidian4.Setting(div).setName("Group Name").addText((text) => text.setValue(group.name).onChange(async (val) => {
-        group.name = val;
+      new import_obsidian5.Setting(div).setName("Header").addText((t) => t.setValue(group.header).onChange(async (v) => {
+        group.header = v;
         await this.plugin.saveSettings();
       }));
-      new import_obsidian4.Setting(div).setName("Header").addText((text) => text.setValue(group.header).onChange(async (val) => {
-        group.header = val;
+      new import_obsidian5.Setting(div).setName("Show Descriptions").addToggle((t) => t.setValue(group.showDescription).onChange(async (v) => {
+        group.showDescription = v;
         await this.plugin.saveSettings();
       }));
-      new import_obsidian4.Setting(div).setName("Show Descriptions").addToggle((toggle) => toggle.setValue(group.showDescription).onChange(async (val) => {
-        group.showDescription = val;
-        await this.plugin.saveSettings();
-      }));
-      new import_obsidian4.Setting(div).setName("ICS URLs").addTextArea((text) => text.setValue(group.urls.join("\n")).onChange(async (val) => {
-        group.urls = val.split("\n").filter((u) => u.trim().length > 0);
+      new import_obsidian5.Setting(div).setName("ICS URLs").addTextArea((t) => t.setValue(group.urls.join("\n")).onChange(async (v) => {
+        group.urls = v.split("\n").filter((u) => u.trim().length > 0);
         await this.plugin.saveSettings();
       }));
     });
-    new import_obsidian4.Setting(containerEl).addButton((btn) => btn.setButtonText("+ Add Calendar Group").setCta().onClick(async () => {
+    new import_obsidian5.Setting(containerEl).addButton((b) => b.setButtonText("+ Add Group").setCta().onClick(async () => {
       this.plugin.settings.calendarGroups.push({
         id: Date.now().toString(),
         name: "New Group",
@@ -8302,45 +8339,66 @@ var DaySparkSettingTab = class extends import_obsidian4.PluginSettingTab {
     }));
     containerEl.createEl("hr");
     containerEl.createEl("h3", { text: "\u{1F311} Moon Phase" });
-    new import_obsidian4.Setting(containerEl).setName("Enable Moon Phase").addToggle((toggle) => toggle.setValue(this.plugin.settings.enableMoon).onChange(async (value) => {
-      this.plugin.settings.enableMoon = value;
+    new import_obsidian5.Setting(containerEl).setName("Enable Moon Phase").addToggle((t) => t.setValue(this.plugin.settings.enableMoon).onChange(async (v) => {
+      this.plugin.settings.enableMoon = v;
       await this.plugin.saveSettings();
     }));
-    new import_obsidian4.Setting(containerEl).setName("Moon Header").addText((text) => text.setValue(this.plugin.settings.moonHeader).onChange(async (value) => {
-      this.plugin.settings.moonHeader = value;
+    new import_obsidian5.Setting(containerEl).setName("Moon Header").addText((t) => t.setValue(this.plugin.settings.moonHeader).onChange(async (v) => {
+      this.plugin.settings.moonHeader = v;
       await this.plugin.saveSettings();
     }));
     containerEl.createEl("h3", { text: "\u2600\uFE0F Sun Times" });
-    new import_obsidian4.Setting(containerEl).setName("Enable Sun Times").addToggle((toggle) => toggle.setValue(this.plugin.settings.enableSun).onChange(async (value) => {
-      this.plugin.settings.enableSun = value;
+    new import_obsidian5.Setting(containerEl).setName("Enable Sun Times").addToggle((t) => t.setValue(this.plugin.settings.enableSun).onChange(async (v) => {
+      this.plugin.settings.enableSun = v;
       await this.plugin.saveSettings();
     }));
-    new import_obsidian4.Setting(containerEl).setName("Sun Header").addText((text) => text.setValue(this.plugin.settings.sunHeader).onChange(async (value) => {
-      this.plugin.settings.sunHeader = value;
-      await this.plugin.saveSettings();
-    }));
-    containerEl.createEl("hr");
-    containerEl.createEl("h3", { text: "\u{1FA90} Sky Watch (Planets)" });
-    new import_obsidian4.Setting(containerEl).setName("Enable Planet Watch").addToggle((toggle) => toggle.setValue(this.plugin.settings.enablePlanets).onChange(async (value) => {
-      this.plugin.settings.enablePlanets = value;
-      await this.plugin.saveSettings();
-    }));
-    new import_obsidian4.Setting(containerEl).setName("Planet Header").addText((text) => text.setValue(this.plugin.settings.planetHeader).onChange(async (value) => {
-      this.plugin.settings.planetHeader = value;
+    new import_obsidian5.Setting(containerEl).setName("Sun Header").addText((t) => t.setValue(this.plugin.settings.sunHeader).onChange(async (v) => {
+      this.plugin.settings.sunHeader = v;
       await this.plugin.saveSettings();
     }));
     containerEl.createEl("hr");
-    containerEl.createEl("h3", { text: "\u{1F4DC} Seasons & Lore" });
-    new import_obsidian4.Setting(containerEl).setName("Enable Seasons").addToggle((toggle) => toggle.setValue(this.plugin.settings.enableSeasons).onChange(async (value) => {
-      this.plugin.settings.enableSeasons = value;
+    containerEl.createEl("h3", { text: "\u{1FA90} Sky Watch" });
+    new import_obsidian5.Setting(containerEl).setName("Enable Planet Watch").addToggle((t) => t.setValue(this.plugin.settings.enablePlanets).onChange(async (v) => {
+      this.plugin.settings.enablePlanets = v;
       await this.plugin.saveSettings();
     }));
-    new import_obsidian4.Setting(containerEl).setName("Enable Almanac Lore").addToggle((toggle) => toggle.setValue(this.plugin.settings.enableAlmanac).onChange(async (value) => {
-      this.plugin.settings.enableAlmanac = value;
+    new import_obsidian5.Setting(containerEl).setName("Planet Header").addText((t) => t.setValue(this.plugin.settings.planetHeader).onChange(async (v) => {
+      this.plugin.settings.planetHeader = v;
       await this.plugin.saveSettings();
     }));
-    new import_obsidian4.Setting(containerEl).setName("Almanac Header").addText((text) => text.setValue(this.plugin.settings.almanacHeader).onChange(async (value) => {
-      this.plugin.settings.almanacHeader = value;
+    containerEl.createEl("hr");
+    containerEl.createEl("h3", { text: "\u{1F338} Seasons" });
+    new import_obsidian5.Setting(containerEl).setName("Enable Seasons").addToggle((t) => t.setValue(this.plugin.settings.enableSeasons).onChange(async (v) => {
+      this.plugin.settings.enableSeasons = v;
+      await this.plugin.saveSettings();
+    }));
+    containerEl.createEl("hr");
+    containerEl.createEl("h3", { text: "\u{1F4DC} Almanac Lore" });
+    new import_obsidian5.Setting(containerEl).setName("Enable Almanac Lore").addToggle((t) => t.setValue(this.plugin.settings.enableAlmanac).onChange(async (v) => {
+      this.plugin.settings.enableAlmanac = v;
+      await this.plugin.saveSettings();
+    }));
+    new import_obsidian5.Setting(containerEl).setName("Almanac Header").addText((t) => t.setValue(this.plugin.settings.almanacHeader).onChange(async (v) => {
+      this.plugin.settings.almanacHeader = v;
+      await this.plugin.saveSettings();
+    }));
+    containerEl.createEl("hr");
+    containerEl.createEl("h3", { text: "\u{1F570}\uFE0F On This Day (History)" });
+    new import_obsidian5.Setting(containerEl).setName("Enable On This Day").addToggle((t) => t.setValue(this.plugin.settings.enableHistory).onChange(async (v) => {
+      this.plugin.settings.enableHistory = v;
+      await this.plugin.saveSettings();
+    }));
+    new import_obsidian5.Setting(containerEl).setName("Max History Events").setDesc("Number of historical events to display (1-10).").addDropdown((dropdown) => {
+      for (let i = 1; i <= 10; i++) {
+        dropdown.addOption(i.toString(), i.toString());
+      }
+      dropdown.setValue(String(this.plugin.settings.historyLimit)).onChange(async (value) => {
+        this.plugin.settings.historyLimit = parseInt(value);
+        await this.plugin.saveSettings();
+      });
+    });
+    new import_obsidian5.Setting(containerEl).setName("History Header").addText((t) => t.setValue(this.plugin.settings.historyHeader).onChange(async (v) => {
+      this.plugin.settings.historyHeader = v;
       await this.plugin.saveSettings();
     }));
   }

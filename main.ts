@@ -9,6 +9,7 @@ import { PlanetProvider } from './src/providers/PlanetProvider';
 import { SeasonProvider } from './src/providers/SeasonProvider';
 import { WeatherProvider } from './src/providers/WeatherProvider';
 import { LocationProvider } from './src/providers/LocationProvider';
+import { HistoryProvider } from './src/providers/HistoryProvider';
 
 export default class DaySparkPlugin extends Plugin {
     settings: DaySparkSettings;
@@ -34,7 +35,7 @@ export default class DaySparkPlugin extends Plugin {
     refreshProviders() {
         this.providers = [];
         
-        // 0. Location (Ensure context exists)
+        // 0. Location
         this.providers.push(new LocationProvider(this.settings));
 
         // 1. Calendars
@@ -42,13 +43,14 @@ export default class DaySparkPlugin extends Plugin {
             this.providers.push(new IcsProvider(this.app, group));
         }
 
-        // 2. Astronomy & Context
+        // 2. Context
         this.providers.push(new WeatherProvider(this.settings)); 
         this.providers.push(new MoonProvider(this.settings));
         this.providers.push(new SunProvider(this.settings));
         this.providers.push(new PlanetProvider(this.settings));
         this.providers.push(new SeasonProvider(this.settings));
         this.providers.push(new AlmanacProvider(this.settings));
+        this.providers.push(new HistoryProvider(this.settings));
     }
 
     async activateMagic() {
@@ -66,7 +68,6 @@ export default class DaySparkPlugin extends Plugin {
 
         new Notice(`DaySparking context for ${date.toDateString()}...`);
 
-        // Read content ONCE to pass to all providers for context
         let currentContent = await this.app.vault.read(activeFile);
         let modificationsMade = false;
 
@@ -74,7 +75,6 @@ export default class DaySparkPlugin extends Plugin {
             try {
                 const result = await provider.getDataForDate(date, currentContent);
                 if (result.items.length > 0) {
-                    // Pass 'replaceContext' setting to utility
                     const newContent = insertOrUpdateSection(currentContent, provider.targetHeader, result.items, this.settings.replaceContext);
                     if (newContent !== currentContent) {
                         currentContent = newContent;
@@ -96,7 +96,7 @@ export default class DaySparkPlugin extends Plugin {
 
     async loadSettings() {
         const loadedData = await this.loadData();
-        // Backward compatibility migration
+        // Migrations
         if (loadedData && loadedData.icsUrls && !loadedData.calendarGroups) {
             loadedData.calendarGroups = [{
                 id: 'migrated',
@@ -107,7 +107,6 @@ export default class DaySparkPlugin extends Plugin {
                 showDescription: true
             }];
         }
-
         if (loadedData && loadedData.calendarGroups) {
              loadedData.calendarGroups.forEach((group: any) => {
                  if (group.showDescription === undefined) group.showDescription = true;
@@ -141,119 +140,126 @@ class DaySparkSettingTab extends PluginSettingTab {
 
         new Setting(containerEl)
             .setName('Overwrite Sections')
-            .setDesc('If enabled, updating a note will replace existing data in DaySpark sections (e.g. Weather, Moon) instead of adding to it. Useful for updating location data.')
+            .setDesc('If enabled, DaySpark will update existing sections instead of appending.')
             .addToggle(toggle => toggle
                 .setValue(this.plugin.settings.replaceContext)
-                .onChange(async (value) => {
-                    this.plugin.settings.replaceContext = value;
+                .onChange(async (val) => {
+                    this.plugin.settings.replaceContext = val;
                     await this.plugin.saveSettings();
                 }));
 
         new Setting(containerEl)
             .setName('Latitude')
-            .setDesc('Used by Sun, Moon, Planets, and Weather.')
             .addText(text => text
                 .setValue(String(this.plugin.settings.latitude))
-                .onChange(async (value) => {
-                    const num = parseFloat(value);
-                    if (!isNaN(num)) {
-                        this.plugin.settings.latitude = num;
-                        await this.plugin.saveSettings();
-                    }
+                .onChange(async (val) => {
+                    this.plugin.settings.latitude = parseFloat(val);
+                    await this.plugin.saveSettings();
                 }));
 
         new Setting(containerEl)
             .setName('Longitude')
-            .setDesc('Used by Sun, Moon, Planets, and Weather.')
             .addText(text => text
                 .setValue(String(this.plugin.settings.longitude))
-                .onChange(async (value) => {
-                    const num = parseFloat(value);
-                    if (!isNaN(num)) {
-                        this.plugin.settings.longitude = num;
-                        await this.plugin.saveSettings();
-                    }
-                }));
-        
-        // Removed Default Location Name setting as requested
-
-        new Setting(containerEl)
-            .setName('24-Hour Time')
-            .setDesc('Use 24-hour format (e.g. 14:30).')
-            .addToggle(toggle => toggle
-                .setValue(this.plugin.settings.use24HourFormat)
-                .onChange(async (value) => {
-                    this.plugin.settings.use24HourFormat = value;
+                .onChange(async (val) => {
+                    this.plugin.settings.longitude = parseFloat(val);
                     await this.plugin.saveSettings();
                 }));
 
-        // --- WEATHER SECTION ---
+        new Setting(containerEl)
+            .setName('24-Hour Time')
+            .addToggle(toggle => toggle
+                .setValue(this.plugin.settings.use24HourFormat)
+                .onChange(async (val) => {
+                    this.plugin.settings.use24HourFormat = val;
+                    await this.plugin.saveSettings();
+                }));
+
+        // --- WEATHER ---
         containerEl.createEl('hr');
         containerEl.createEl('h3', { text: '🌦️ Weather' });
         
         new Setting(containerEl)
             .setName('Enable Weather')
-            .setDesc('Fetch current forecast or historical weather.')
             .addToggle(toggle => toggle
                 .setValue(this.plugin.settings.enableWeather)
-                .onChange(async (value) => {
-                    this.plugin.settings.enableWeather = value;
+                .onChange(async (val) => {
+                    this.plugin.settings.enableWeather = val;
                     await this.plugin.saveSettings();
                 }));
 
         new Setting(containerEl)
             .setName('Use Metric Units')
-            .setDesc('Enable for Celsius/kmh. Disable for Fahrenheit/mph.')
             .addToggle(toggle => toggle
                 .setValue(this.plugin.settings.useMetric)
-                .onChange(async (value) => {
-                    this.plugin.settings.useMetric = value;
+                .onChange(async (val) => {
+                    this.plugin.settings.useMetric = val;
                     await this.plugin.saveSettings();
                 }));
 
         new Setting(containerEl)
             .setName('Weather Header')
             .addText(text => text
-                .setPlaceholder('## Weather')
                 .setValue(this.plugin.settings.weatherHeader)
-                .onChange(async (value) => {
-                    this.plugin.settings.weatherHeader = value;
+                .onChange(async (val) => {
+                    this.plugin.settings.weatherHeader = val;
                     await this.plugin.saveSettings();
                 }));
 
-        // --- CALENDAR SECTION ---
+        // --- CALENDAR ---
         containerEl.createEl('hr');
         containerEl.createEl('h3', { text: '📅 Calendar Groups' });
         
         this.plugin.settings.calendarGroups.forEach((group, index) => {
             const div = containerEl.createDiv({ cls: 'dayspark-group-box', attr: { style: 'border: 1px solid var(--background-modifier-border); padding: 10px; margin-bottom: 10px; border-radius: 5px;' } });
             
-            const topSettings = new Setting(div)
+            new Setting(div)
                 .setName(`Group ${index + 1}`)
-                .addToggle(toggle => toggle
+                .addToggle(t => t
                     .setValue(group.enabled)
-                    .onChange(async (val) => {
-                        group.enabled = val;
+                    .onChange(async v => {
+                        group.enabled = v;
                         await this.plugin.saveSettings();
                     }))
-                .addExtraButton(btn => btn
+                .addExtraButton(b => b
                     .setIcon('trash')
                     .onClick(async () => {
                         this.plugin.settings.calendarGroups.splice(index, 1);
                         await this.plugin.saveSettings();
-                        this.display(); 
+                        this.display();
                     }));
-            topSettings.nameEl.style.fontWeight = 'bold';
 
-            new Setting(div).setName('Group Name').addText(text => text.setValue(group.name).onChange(async (val) => { group.name = val; await this.plugin.saveSettings(); }));
-            new Setting(div).setName('Header').addText(text => text.setValue(group.header).onChange(async (val) => { group.header = val; await this.plugin.saveSettings(); }));
-            new Setting(div).setName('Show Descriptions').addToggle(toggle => toggle.setValue(group.showDescription).onChange(async (val) => { group.showDescription = val; await this.plugin.saveSettings(); }));
-            new Setting(div).setName('ICS URLs').addTextArea(text => text.setValue(group.urls.join('\n')).onChange(async (val) => { group.urls = val.split('\n').filter(u => u.trim().length > 0); await this.plugin.saveSettings(); }));
+            new Setting(div)
+                .setName('Header')
+                .addText(t => t
+                    .setValue(group.header)
+                    .onChange(async v => {
+                        group.header = v;
+                        await this.plugin.saveSettings();
+                    }));
+
+            new Setting(div)
+                .setName('Show Descriptions')
+                .addToggle(t => t
+                    .setValue(group.showDescription)
+                    .onChange(async v => {
+                        group.showDescription = v;
+                        await this.plugin.saveSettings();
+                    }));
+
+            new Setting(div)
+                .setName('ICS URLs')
+                .addTextArea(t => t
+                    .setValue(group.urls.join('\n'))
+                    .onChange(async v => {
+                        group.urls = v.split('\n').filter(u => u.trim().length > 0);
+                        await this.plugin.saveSettings();
+                    }));
         });
 
         new Setting(containerEl)
-            .addButton(btn => btn
-                .setButtonText('+ Add Calendar Group')
+            .addButton(b => b
+                .setButtonText('+ Add Group')
                 .setCta()
                 .onClick(async () => {
                     this.plugin.settings.calendarGroups.push({
@@ -268,28 +274,141 @@ class DaySparkSettingTab extends PluginSettingTab {
                     this.display();
                 }));
 
-        // --- MOON SECTION ---
+        // --- MOON ---
         containerEl.createEl('hr');
         containerEl.createEl('h3', { text: '🌑 Moon Phase' });
-        new Setting(containerEl).setName('Enable Moon Phase').addToggle(toggle => toggle.setValue(this.plugin.settings.enableMoon).onChange(async (value) => { this.plugin.settings.enableMoon = value; await this.plugin.saveSettings(); }));
-        new Setting(containerEl).setName('Moon Header').addText(text => text.setValue(this.plugin.settings.moonHeader).onChange(async (value) => { this.plugin.settings.moonHeader = value; await this.plugin.saveSettings(); }));
-
-        // --- SUN SECTION ---
-        containerEl.createEl('h3', { text: '☀️ Sun Times' });
-        new Setting(containerEl).setName('Enable Sun Times').addToggle(toggle => toggle.setValue(this.plugin.settings.enableSun).onChange(async (value) => { this.plugin.settings.enableSun = value; await this.plugin.saveSettings(); }));
-        new Setting(containerEl).setName('Sun Header').addText(text => text.setValue(this.plugin.settings.sunHeader).onChange(async (value) => { this.plugin.settings.sunHeader = value; await this.plugin.saveSettings(); }));
         
-        // --- PLANETS SECTION ---
-        containerEl.createEl('hr');
-        containerEl.createEl('h3', { text: '🪐 Sky Watch (Planets)' });
-        new Setting(containerEl).setName('Enable Planet Watch').addToggle(toggle => toggle.setValue(this.plugin.settings.enablePlanets).onChange(async (value) => { this.plugin.settings.enablePlanets = value; await this.plugin.saveSettings(); }));
-        new Setting(containerEl).setName('Planet Header').addText(text => text.setValue(this.plugin.settings.planetHeader).onChange(async (value) => { this.plugin.settings.planetHeader = value; await this.plugin.saveSettings(); }));
+        new Setting(containerEl)
+            .setName('Enable Moon Phase')
+            .addToggle(t => t
+                .setValue(this.plugin.settings.enableMoon)
+                .onChange(async v => {
+                    this.plugin.settings.enableMoon = v;
+                    await this.plugin.saveSettings();
+                }));
 
-        // --- SEASONS & ALMANAC SECTION ---
+        new Setting(containerEl)
+            .setName('Moon Header')
+            .addText(t => t
+                .setValue(this.plugin.settings.moonHeader)
+                .onChange(async v => {
+                    this.plugin.settings.moonHeader = v;
+                    await this.plugin.saveSettings();
+                }));
+
+        // --- SUN ---
+        containerEl.createEl('h3', { text: '☀️ Sun Times' });
+        
+        new Setting(containerEl)
+            .setName('Enable Sun Times')
+            .addToggle(t => t
+                .setValue(this.plugin.settings.enableSun)
+                .onChange(async v => {
+                    this.plugin.settings.enableSun = v;
+                    await this.plugin.saveSettings();
+                }));
+
+        new Setting(containerEl)
+            .setName('Sun Header')
+            .addText(t => t
+                .setValue(this.plugin.settings.sunHeader)
+                .onChange(async v => {
+                    this.plugin.settings.sunHeader = v;
+                    await this.plugin.saveSettings();
+                }));
+
+        // --- PLANETS ---
         containerEl.createEl('hr');
-        containerEl.createEl('h3', { text: '📜 Seasons & Lore' });
-        new Setting(containerEl).setName('Enable Seasons').addToggle(toggle => toggle.setValue(this.plugin.settings.enableSeasons).onChange(async (value) => { this.plugin.settings.enableSeasons = value; await this.plugin.saveSettings(); }));
-        new Setting(containerEl).setName('Enable Almanac Lore').addToggle(toggle => toggle.setValue(this.plugin.settings.enableAlmanac).onChange(async (value) => { this.plugin.settings.enableAlmanac = value; await this.plugin.saveSettings(); }));
-        new Setting(containerEl).setName('Almanac Header').addText(text => text.setValue(this.plugin.settings.almanacHeader).onChange(async (value) => { this.plugin.settings.almanacHeader = value; await this.plugin.saveSettings(); }));
+        containerEl.createEl('h3', { text: '🪐 Sky Watch' });
+        
+        new Setting(containerEl)
+            .setName('Enable Planet Watch')
+            .addToggle(t => t
+                .setValue(this.plugin.settings.enablePlanets)
+                .onChange(async v => {
+                    this.plugin.settings.enablePlanets = v;
+                    await this.plugin.saveSettings();
+                }));
+
+        new Setting(containerEl)
+            .setName('Planet Header')
+            .addText(t => t
+                .setValue(this.plugin.settings.planetHeader)
+                .onChange(async v => {
+                    this.plugin.settings.planetHeader = v;
+                    await this.plugin.saveSettings();
+                }));
+
+        // --- SEASONS ---
+        containerEl.createEl('hr');
+        containerEl.createEl('h3', { text: '🌸 Seasons' });
+        
+        new Setting(containerEl)
+            .setName('Enable Seasons')
+            .addToggle(t => t
+                .setValue(this.plugin.settings.enableSeasons)
+                .onChange(async v => {
+                    this.plugin.settings.enableSeasons = v;
+                    await this.plugin.saveSettings();
+                }));
+
+        // --- ALMANAC ---
+        containerEl.createEl('hr');
+        containerEl.createEl('h3', { text: '📜 Almanac Lore' });
+
+        new Setting(containerEl)
+            .setName('Enable Almanac Lore')
+            .addToggle(t => t
+                .setValue(this.plugin.settings.enableAlmanac)
+                .onChange(async v => {
+                    this.plugin.settings.enableAlmanac = v;
+                    await this.plugin.saveSettings();
+                }));
+
+        new Setting(containerEl)
+            .setName('Almanac Header')
+            .addText(t => t
+                .setValue(this.plugin.settings.almanacHeader)
+                .onChange(async v => {
+                    this.plugin.settings.almanacHeader = v;
+                    await this.plugin.saveSettings();
+                }));
+        
+        // --- HISTORY ---
+        containerEl.createEl('hr');
+        containerEl.createEl('h3', { text: '🕰️ On This Day (History)' });
+
+        new Setting(containerEl)
+            .setName('Enable On This Day')
+            .addToggle(t => t
+                .setValue(this.plugin.settings.enableHistory)
+                .onChange(async v => {
+                    this.plugin.settings.enableHistory = v;
+                    await this.plugin.saveSettings();
+                }));
+        
+        new Setting(containerEl)
+            .setName('Max History Events')
+            .setDesc('Number of historical events to display (1-10).')
+            .addDropdown(dropdown => {
+                for (let i = 1; i <= 10; i++) {
+                    dropdown.addOption(i.toString(), i.toString());
+                }
+                dropdown
+                    .setValue(String(this.plugin.settings.historyLimit))
+                    .onChange(async (value) => {
+                        this.plugin.settings.historyLimit = parseInt(value);
+                        await this.plugin.saveSettings();
+                    });
+            });
+
+        new Setting(containerEl)
+            .setName('History Header')
+            .addText(t => t
+                .setValue(this.plugin.settings.historyHeader)
+                .onChange(async v => {
+                    this.plugin.settings.historyHeader = v;
+                    await this.plugin.saveSettings();
+                }));
     }
 }

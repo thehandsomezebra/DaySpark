@@ -32,6 +32,11 @@ Unlike standard template plugins that just paste a date, DaySpark calculates the
 - **Metric/Imperial:** Supports °F/mph and °C/km/h.
 - **Zero Config:** Uses the free Open-Meteo API (no API key required).
     
+### 🕰️ On This Day in History
+
+- **Historical Events:** Fetches significant events that happened on this specific date from Wikipedia.
+- **Curated:** Limits the list to top events (configurable 1-10) to keep your notes focused without clutter.
+
 
 ### 📍 Dynamic Location
 
@@ -101,13 +106,12 @@ DaySpark will detect this, find the coordinates for Las Vegas, and generate the 
 DaySpark is privacy-focused:
 
 - **No Tracking:** No user data is sent to the developer.
-    
 - **Open APIs:** Weather and Geocoding data are fetched directly from [Open-Meteo](https://open-meteo.com "null") and [Nominatim (OSM)](https://nominatim.org "null") from your device.
-    
+- **History Data:** Historical events are fetched from the [Wikimedia API](https://api.wikimedia.org "null") (Wikipedia).
 - **Local Processing:** All astronomical math (Sun, Moon, Planets) is calculated locally on your device using high-precision algorithms.
     
 
 ## 🗺️ Roadmap
 
-- **Historical Events:** "On This Day" provider.
+
 - **Location History:** Integration with Google Takeout location data.
