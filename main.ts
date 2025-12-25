@@ -10,6 +10,7 @@ import { SeasonProvider } from './src/providers/SeasonProvider';
 import { WeatherProvider } from './src/providers/WeatherProvider';
 import { LocationProvider } from './src/providers/LocationProvider';
 import { HistoryProvider } from './src/providers/HistoryProvider';
+import { CelestialEventsProvider } from './src/providers/CelestialEventsProvider'; // NEW
 
 export default class DaySparkPlugin extends Plugin {
     settings: DaySparkSettings;
@@ -48,6 +49,7 @@ export default class DaySparkPlugin extends Plugin {
         this.providers.push(new MoonProvider(this.settings));
         this.providers.push(new SunProvider(this.settings));
         this.providers.push(new PlanetProvider(this.settings));
+        this.providers.push(new CelestialEventsProvider(this.settings)); // NEW
         this.providers.push(new SeasonProvider(this.settings));
         this.providers.push(new AlmanacProvider(this.settings));
         this.providers.push(new HistoryProvider(this.settings));
@@ -230,6 +232,15 @@ class DaySparkSettingTab extends PluginSettingTab {
                     }));
 
             new Setting(div)
+                .setName('Group Name')
+                .addText(t => t
+                    .setValue(group.name)
+                    .onChange(async v => {
+                        group.name = v;
+                        await this.plugin.saveSettings();
+                    }));
+
+            new Setting(div)
                 .setName('Header')
                 .addText(t => t
                     .setValue(group.header)
@@ -339,9 +350,32 @@ class DaySparkSettingTab extends PluginSettingTab {
                     await this.plugin.saveSettings();
                 }));
 
-        // --- SEASONS ---
+        // --- CELESTIAL EVENTS (Conjunctions) ---
         containerEl.createEl('hr');
-        containerEl.createEl('h3', { text: '🌸 Seasons' });
+        containerEl.createEl('h3', { text: '✨ Celestial Events' });
+        
+        new Setting(containerEl)
+            .setName('Enable Celestial Events')
+            .setDesc('Conjunctions (☌) and Meteor Showers.')
+            .addToggle(t => t
+                .setValue(this.plugin.settings.enableCelestialEvents)
+                .onChange(async v => {
+                    this.plugin.settings.enableCelestialEvents = v;
+                    await this.plugin.saveSettings();
+                }));
+
+        new Setting(containerEl)
+            .setName('Celestial Header')
+            .addText(t => t
+                .setValue(this.plugin.settings.celestialHeader)
+                .onChange(async v => {
+                    this.plugin.settings.celestialHeader = v;
+                    await this.plugin.saveSettings();
+                }));
+
+        // --- SEASONS & ALMANAC & HISTORY ---
+        containerEl.createEl('hr');
+        containerEl.createEl('h3', { text: '📜 Seasons, Lore & History' });
         
         new Setting(containerEl)
             .setName('Enable Seasons')
@@ -351,10 +385,6 @@ class DaySparkSettingTab extends PluginSettingTab {
                     this.plugin.settings.enableSeasons = v;
                     await this.plugin.saveSettings();
                 }));
-
-        // --- ALMANAC ---
-        containerEl.createEl('hr');
-        containerEl.createEl('h3', { text: '📜 Almanac Lore' });
 
         new Setting(containerEl)
             .setName('Enable Almanac Lore')

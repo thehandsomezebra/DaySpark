@@ -1,0 +1,45 @@
+name: Release DaySpark
+
+on:
+  push:
+    # Trigger the workflow when you push a tag like "1.0.0" or "v1.0.0"
+    tags:
+      - '*'
+
+# CRITICAL: This permission allows the action to actually create the Release page
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Use Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '23'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build plugin
+        run: npm run build
+        # This generates 'main.js' fresh from source
+
+      - name: Create Release
+        id: create_release
+        uses: softprops/action-gh-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          # Files to attach to the release (Obsidian needs main.js and manifest.json)
+          files: |
+            main.js
+            manifest.json
+          draft: false
+          prerelease: false
+          fail_on_unmatched_files: false # Safety.

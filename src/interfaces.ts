@@ -55,7 +55,11 @@ export interface DaySparkSettings {
     // History Settings
     enableHistory: boolean;
     historyHeader: string;
-    historyLimit: number; // NEW: Limit for history events
+    historyLimit: number;
+
+    // NEW: Celestial Events Settings
+    enableCelestialEvents: boolean;
+    celestialHeader: string;
 
     // General Behavior
     replaceContext: boolean;
@@ -89,6 +93,10 @@ export const DEFAULT_SETTINGS: DaySparkSettings = {
     useMetric: false,
     enableHistory: true, 
     historyHeader: '## On This Day',
-    historyLimit: 5, // Default to 5
-    replaceContext: true
+    historyLimit: 5,
+    replaceContext: true,
+    
+    // Defaults for new provider
+    enableCelestialEvents: true,
+    celestialHeader: '## Celestial Events'
 };
