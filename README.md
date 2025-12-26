@@ -9,7 +9,7 @@ Unlike standard template plugins that just paste a date, DaySpark calculates the
 ### 📅 Smart Calendars
 
 - **Universal Support:** Works with generic `.ics` URLs and local `.ics` files in your vault.
-- **Grouping:** Organize events into "Work," "Personal," or "Astrology" groups with their own custom headers.
+- **Grouping:** Organize events into "Work," "Personal," or "Birthdays" groups with their own custom headers.
 - **Time Travel:** Correctly fetches past events for historical notes, keeping your archives accurate.
 
 ### 🌑 Precision Astronomy (Almanac Style)
