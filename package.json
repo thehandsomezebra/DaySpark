@@ -1,12 +1,12 @@
 {
   "name": "dayspark",
-  "version": "0.0.1",
+  "version": "1.0.0",
   "description": "A digital almanac for daily notes. Injects ICS calendars, sun/moon phases, celestial conjunctions, meteor showers, weather, and historical context.",
   "main": "main.js",
   "scripts": {
     "dev": "node esbuild.config.mjs",
     "build": "tsc -noEmit && node esbuild.config.mjs production",
-    "version": "node scripts/sync-manifest.mjs && git add manifest.json"
+    "version": "node scripts/sync-manifest.js && git add manifest.json"
   },
   "keywords": [
     "obsidian",
