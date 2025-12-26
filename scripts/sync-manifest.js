@@ -20,8 +20,11 @@ try {
     const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
 
     // 3. Update fields
-    console.log(`DaySpark: Syncing manifest to version ${version}...`);
-    manifest.version = version;
+    // CLEANUP: Ensure no 'v' prefix exists in the manifest version
+    const cleanVersion = version.replace(/^v/, '');
+    
+    console.log(`DaySpark: Syncing manifest to version ${cleanVersion}...`);
+    manifest.version = cleanVersion;
     manifest.description = description;
     manifest.author = author;
 
