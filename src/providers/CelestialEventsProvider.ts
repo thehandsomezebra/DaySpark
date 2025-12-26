@@ -37,8 +37,6 @@ export class CelestialEventsProvider implements SparkProvider {
         planets.forEach(p => prevPlanets.set(p, this.getGeocentricPlanetPosition(p, dayStart)));
 
         // 1. High-Resolution Scanner
-        // This loop handles Conjunctions, Nodes, Equator Crossings, and Peaks.
-        // It only performs calculations for toggled categories.
         if (this.settings.enableBasicEvents || this.settings.enableAdvancedAstronomy) {
             for (let i = 1; i <= steps; i++) {
                 const currentTime = new Date(dayStart.getTime() + i * stepSize);
@@ -59,7 +57,7 @@ export class CelestialEventsProvider implements SparkProvider {
                             const symbol = this.getPlanetSymbol(p);
                             rawEvents.push({ 
                                 time: currentTime, 
-                                text: `${this.formatTime(currentTime)} ☌ ☾ ${symbol} **Conjunction**` 
+                                text: `☌ ☾ ${symbol} **Conjunction**` 
                             });
                         }
                     });
@@ -69,7 +67,7 @@ export class CelestialEventsProvider implements SparkProvider {
                         const label = currMoon.lat > prevMoon.lat ? 'at ☊ (Ascending)' : 'at ☋ (Descending)';
                         rawEvents.push({ 
                             time: currentTime, 
-                            text: `${this.formatTime(currentTime)} ☽ **${label} Node**` 
+                            text: `☽ **${label} Node**` 
                         });
                     }
                 }
@@ -79,7 +77,7 @@ export class CelestialEventsProvider implements SparkProvider {
                     // Equator Crossing
                     if (prevMoon.dec * currMoon.dec <= 0) {
                         const label = currMoon.dec > prevMoon.dec ? 'crosses Equator North' : 'crosses Equator South';
-                        rawEvents.push({ time: currentTime, text: `${this.formatTime(currentTime)} ☽ **${label}**` });
+                        rawEvents.push({ time: currentTime, text: `☽ **${label}**` });
                     }
 
                     if (i > 1) {
@@ -90,14 +88,14 @@ export class CelestialEventsProvider implements SparkProvider {
                         const vDec2 = currMoon.dec - prevMoon.dec;
                         if (vDec1 * vDec2 < 0 && Math.abs(vDec1) > 0) {
                             const label = prevMoon.dec > 0 ? 'runs High' : 'runs Low';
-                            rawEvents.push({ time: currentTime, text: `${this.formatTime(currentTime)} ☽ **${label}**` });
+                            rawEvents.push({ time: currentTime, text: `☽ **${label}**` });
                         }
 
                         const vDist1 = prevMoon.dist - moon0.dist;
                         const vDist2 = currMoon.dist - prevMoon.dist;
                         if (vDist1 * vDist2 < 0 && Math.abs(vDist1) > 0) {
                             const label = vDist1 > 0 ? 'at Apogee (Furthest)' : 'at Perigee (Closest)';
-                            rawEvents.push({ time: currentTime, text: `${this.formatTime(currentTime)} ☽ **${label}**` });
+                            rawEvents.push({ time: currentTime, text: `☽ **${label}**` });
                         }
                     }
                 }
@@ -107,12 +105,15 @@ export class CelestialEventsProvider implements SparkProvider {
             }
         }
 
-        // 2. METEOR SHOWERS (Always checked if Celestial Events are enabled)
+        // 2. METEOR SHOWERS (Updated with associated comets)
         if (this.settings.enableMeteorShowers) {
             const shower = this.getMeteorShower(targetDate);
-            if (shower) rawEvents.push({ time: dayStart, text: `🌠 **Meteor Shower:** ${shower}` });
+            if (shower) {
+                rawEvents.push({ time: dayStart, text: `🌠 **Meteor Shower:** ${shower}` });
+            }
         }
 
+        // Sort by time, then map to unique text items
         rawEvents.sort((a, b) => a.time.getTime() - b.time.getTime());
         const uniqueItems = [...new Set(rawEvents.map(e => e.text))];
 
@@ -224,35 +225,35 @@ export class CelestialEventsProvider implements SparkProvider {
         return symbols[name] || '';
     }
 
-    private formatTime(date: Date): string {
-        const hours = date.getHours();
-        const minutes = date.getMinutes();
-        const mStr = minutes < 10 ? '0' + minutes : minutes;
-        if (this.settings.use24HourFormat) {
-            const hStr = hours < 10 ? '0' + hours : hours;
-            return `${hStr}:${mStr}`;
-        } else {
-            const period = hours >= 12 ? 'PM' : 'AM';
-            const h12 = hours % 12 || 12;
-            return `${h12}:${mStr} ${period}`;
-        }
-    }
-
     private getMeteorShower(date: Date): string | null {
-        const showers = [ 
-            { name: "Quadrantids", m: 0, d: 3, range: 2 }, 
-            { name: "Lyrids", m: 3, d: 22, range: 1 }, 
-            { name: "Eta Aquariids", m: 4, d: 6, range: 2 }, 
-            { name: "Perseids", m: 7, d: 12, range: 2 }, 
-            { name: "Orionids", m: 9, d: 21, range: 2 }, 
-            { name: "Leonids", m: 10, d: 17, range: 1 }, 
-            { name: "Geminids", m: 11, d: 14, range: 2 }, 
-            { name: "Ursids", m: 11, d: 22, range: 1 } 
-        ];
         const m = date.getMonth();
         const d = date.getDate();
+
+        // Data derived from Farmer's Almanac Principle Meteor Showers table
+        // Month is 0-indexed (Jan=0, Apr=3, etc.)
+        const showers = [ 
+            { name: "Quadrantids", m: 0, d: 4, range: 0, comet: null }, 
+            { name: "Lyrids", m: 3, d: 22, range: 0, comet: "Thatcher" }, 
+            { name: "Eta Aquarids", m: 4, d: 4, range: 0, comet: "Halley" }, 
+            { name: "Delta Aquarids", m: 6, d: 30, range: 0, comet: null }, 
+            { name: "Perseids", m: 7, d: 12, range: 1, comet: "Swift-Tuttle" }, 
+            { name: "Draconids", m: 9, d: 9, range: 0, comet: "Giacobini-Zinner" }, 
+            { name: "Orionids", m: 9, d: 21, range: 1, comet: "Halley" }, 
+            { name: "Northern Taurids", m: 10, d: 9, range: 0, comet: "Encke" }, 
+            { name: "Leonids", m: 10, d: 17, range: 1, comet: "Tempel-Tuttle" }, 
+            { name: "Andromedids", m: 10, d: 26, range: 1, comet: "Biela" }, 
+            { name: "Geminids", m: 11, d: 13, range: 1, comet: null }, 
+            { name: "Ursids", m: 11, d: 22, range: 0, comet: "Tuttle" } 
+        ];
+
         for (const s of showers) { 
-            if (m === s.m && Math.abs(d - s.d) <= s.range) return `${s.name} (Peak)`; 
+            if (m === s.m && Math.abs(d - s.d) <= s.range) {
+                let text = `${s.name} (Peak)`;
+                if (s.comet) {
+                    text += ` — Associated Comet: ${s.comet}`;
+                }
+                return text;
+            } 
         }
         return null;
     }
