@@ -1,15 +1,26 @@
 {
   "name": "dayspark",
   "version": "1.0.0",
-  "description": "Obsidian DaySpark Plugin",
+  "description": "A digital almanac for daily notes. Injects ICS calendars, sun/moon phases, celestial conjunctions, meteor showers, weather, and historical context.",
   "main": "main.js",
   "scripts": {
     "dev": "node esbuild.config.mjs",
     "build": "tsc -noEmit && node esbuild.config.mjs production",
     "version": "node scripts/sync-manifest.mjs && git add manifest.json"
   },
-  "keywords": [],
-  "author": "",
+  "keywords": [
+    "obsidian",
+    "almanac",
+    "calendar",
+    "ics",
+    "astronomy",
+    "moon",
+    "sun",
+    "weather",
+    "history",
+    "celestial"
+  ],
+  "author": "Stephanie Frantz",
   "license": "MIT",
   "devDependencies": {
     "@types/node": "^16.11.6",
