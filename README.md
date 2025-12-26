@@ -9,116 +9,74 @@ Unlike standard template plugins that just paste a date, DaySpark calculates the
 ### 📅 Smart Calendars
 
 - **Universal Support:** Works with generic `.ics` URLs and local `.ics` files in your vault.
-- **Grouping:** Organize events into "Work," "Personal," or "Astrology" groups with their own headers.
-- **Time Travel:** Correctly fetches past events for historical notes.
-    
+- **Grouping:** Organize events into "Work," "Personal," or "Astrology" groups with their own custom headers.
+- **Time Travel:** Correctly fetches past events for historical notes, keeping your archives accurate.
 
 ### 🌑 Precision Astronomy (Almanac Style)
 
-- **Moon Phase:** Calculates phase, illumination, and age (in days) matching traditional Farmer's Almanac logic.
-- **Constellations:** accurate Astronomical Positions (e.g., Ophiuchus, Cetus) using UTC Midnight calculations.
-- **Rise & Set:** Precise local times for Sun and Moon, accounting for your exact coordinates and Daylight Saving Time.
-    
+- **Moon Phase:** Calculates phase and illumination percentage using high-precision geocentric algorithms.
+- **Moon Age:** Tracks the moon's age in calendar days since the last New Moon, matching traditional logic.
+- **Constellations:** Identifies the Moon's actual Astronomical Position (e.g., Ophiuchus, Cetus) using UTC-based calculations.
+- **Rise & Set:** Precise local times for Sun and Moon, accounting for your exact coordinates and local time zone shifts.
 
 ### ✨ Celestial Events
 
-- **Conjunctions:** Identifies when planets or the Moon pass each other in the sky (e.g., `☌ ☾ ♃`).
+- **Conjunctions:** Identifies when planets or the Moon align in Right Ascension (e.g., `☌ ☾ ♄`).
 - **Meteor Showers:** Alerts you to major meteor shower peaks (e.g., Perseids, Geminids).
-- **Lunar Events:** Tracks Nodes (`at ☊`), Equator crossings (`on Eq.`), and distance extremes (`at Perig.`/`at Apo.`).
-
+- **Lunar Events:** Tracks Lunar Nodes (`at ☊`), Equator crossings (`crosses Eq.`), and distance extremes (`at Perigee` / `at Apogee`).
+- **Planetary Stations:** (Optional) Can be configured to track when planets turn Retrograde or Direct.
 
 ### 🪐 Sky Watch
 
-- **Planetary Visibility:** Tells you which naked-eye planets (Mercury, Venus, Mars, Jupiter, Saturn) are visible tonight.
-- **Smart Advice:** Knows if a planet is visible "All Night," "In the Morning," or if it's "Difficult" due to twilight glare.
-    
+- **Planetary Visibility:** Identifies which naked-eye planets (Mercury through Saturn) are visible on any given night.
+- **Observational Advice:** Automatically determines if a planet is visible "All Night," "In the Morning," or if it is "Difficult" due to proximity to the Sun.
 
 ### 🌦️ Weather & Elements
 
-- **Context Aware:** Pulls the actual observed weather for past dates or the forecast for future dates.
-- **Metric/Imperial:** Supports °F/mph and °C/km/h.
-- **Zero Config:** Uses the free Open-Meteo API (no API key required).
-    
+- **Context Aware:** Pulls actual observed weather data for past dates or the local forecast for future dates.
+- **Unit Support:** Fully supports both Metric (°C/km/h) and Imperial (°F/mph) systems.
+- **Zero Config:** Powered by the free Open-Meteo API—no API keys or sign-ups required.
+
 ### 🕰️ On This Day in History
 
-- **Historical Events:** Fetches significant events that happened on this specific date from Wikipedia.
-- **Curated:** Limits the list to top events (configurable 1-10) to keep your notes focused without clutter.
-
+- **Wikipedia Integration:** Fetches significant historical events that happened on your note's specific date.
+- **Curated Results:** Limits results to a configurable list (1-10) to keep your daily notes clean and focused.
 
 ### 📍 Dynamic Location
 
-- **Auto-Detection:** Automatically reverse-geocodes your default Lat/Long settings to a city name (e.g., "Detroit, MI").
-- **Travel Ready:** Manually override the location for a specific note by adding a `## My Location` section. DaySpark will recalculate the sun, moon, and weather for _that_ specific place.
-    
+- **Auto-Detection:** Reverse-geocodes your default Lat/Long settings to a recognizable city name.
+- **Travel Overrides:** Traveling? Simply add a `## My Location` section with a city name (e.g., `- Las Vegas, NV`) to your note. DaySpark will detect the change and recalculate all astronomy and weather data for that specific location.
 
 ### 📜 Seasons & Lore
 
-- **Solar Events:** Automatically flags Equinoxes and Solstices.
-- **Weather Lore:** Includes traditional monthly weather proverbs and rhymes. (To be honest: this might not be super useful in a daily. I wanted to put this in a monthly, but I got distracted with just daily stuff. The list came from the 2026 Farmers Almanac.)
-    
+- **Astronomical Seasons:** Flags Equinoxes and Solstices based on the Sun's position.
+- **Cross-Quarter Days:** Includes traditional Almanac mid-season markers like Samhain (Nov 1), Imbolc, Beltane, and Lammas.
+- **Meteorological Seasons:** (Optional) Markers for the 1st of the month transitions.
+- **Weather Lore:** Includes traditional monthly weather proverbs and rhymes straight from the Farmer's Almanac.
 
 ## 🚀 Installation
 
-### From Community Plugins
-
-_Coming Soon!_
-
 ### Manual Installation
 
-1. Download the latest release from the Releases tab.
-2. Extract the files (`main.js`, `manifest.json`) into your vault's plugin folder: `.obsidian/plugins/dayspark/`.
-3. Reload Obsidian and enable DaySpark in settings.
-    
+1. Download the latest release.
+2. Extract `main.js`, `manifest.json`, and `styles.css` into your vault's plugin folder: `.obsidian/plugins/dayspark/`.
+3. Reload Obsidian and enable **DaySpark** in the community plugins settings.
 
 ## ⚙️ Configuration
 
-### 1. General Settings
-
-- **Latitude/Longitude:** Set your home base coordinates (e.g., 40.7128, -74.0060).
-- **24-Hour Time:** Toggle between `2:30 PM` and `14:30`.
-- **Overwrite Sections:** If enabled, clicking the DaySpark button will update existing sections (useful if you change the location).
-    
-
-### 2. Calendars
-
-- Add multiple groups of ICS feeds (Public ICS URLs or local file paths).
-- **Descriptions:** Toggle whether to include event details/notes in your daily log.
-    
-
-### 3. Modules
-
-- Enable or disable specific modules (Moon, Sun, Weather, Planets, Lore) to keep your notes clean.
-    
-
-## 📝 Usage
-
-### The "Magic Button"
-
-Open any note (e.g., `2025-12-25.md`) and click the **Sparkles** icon in the ribbon (or use the command `DaySpark: Add Context`).
-
-### Changing Location
-
-Traveling? Just add this to your daily note before clicking the button:
-
-```
-## My Location
-- Las Vegas, NV
-
-```
-
-DaySpark will detect this, find the coordinates for Las Vegas, and generate the weather and astronomy data for Nevada instead of your home settings.
+- **Latitude/Longitude:** Set your home base coordinates for default calculations.
+- **24-Hour Time:** Toggle between `2:30 PM` and `14:30` formats.
+- **Overwrite Sections:** Enable this to allow DaySpark to update existing sections (perfect for refreshing weather or correcting location).
+- **Modular Toggles:** Every data point (Moon age, Zodiac position, Meteor showers, etc.) has its own toggle to let you build the perfect "Spark."
 
 ## 🔒 Privacy
 
-DaySpark is privacy-focused:
+DaySpark is built for privacy:
 
-- **No Tracking:** No user data is sent to the developer.
-- **Open APIs:** Weather and Geocoding data are fetched directly from [Open-Meteo](https://open-meteo.com "null") and [Nominatim (OSM)](https://nominatim.org "null") from your device.
-- **History Data:** Historical events are fetched from the [Wikimedia API](https://api.wikimedia.org "null") (Wikipedia).
-- **Local Processing:** All astronomical math (Sun, Moon, Planets) is calculated locally on your device using high-precision algorithms.
-    
+- **Local Math:** All astronomical calculations are performed locally on your device.
+- **No Tracking:** No user data or coordinates are ever sent to a central server.
+- **Direct APIs:** Weather and History data are fetched directly from public, open APIs (Open-Meteo, Wikipedia, and Nominatim).
 
 ## 🗺️ Roadmap
 
-
-- ?? That's it?
+- I think that's it for sure now.

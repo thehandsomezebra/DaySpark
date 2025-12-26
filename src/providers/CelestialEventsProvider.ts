@@ -1,5 +1,12 @@
 import { SparkProvider, ProviderResult, DaySparkSettings } from '../interfaces';
 
+/**
+ * MANUAL ASTRONOMY PROVIDER (Farmer's Almanac Edition)
+ * This provider uses manual orbital mechanics to calculate geocentric positions.
+ * It includes Earth's orbit to provide accurate geocentric Right Ascension for conjunctions.
+ * Fully self-contained: no external astronomy libraries required.
+ */
+
 export class CelestialEventsProvider implements SparkProvider {
     id = 'celestial-events';
     displayName = 'Celestial Events';
@@ -11,42 +18,216 @@ export class CelestialEventsProvider implements SparkProvider {
         if (this.settings.celestialHeader) this.targetHeader = this.settings.celestialHeader;
     }
 
-    async getDataForDate(targetDate: Date): Promise<ProviderResult> {
+    async getDataForDate(targetDate: Date, fileContent?: string): Promise<ProviderResult> {
         if (!this.settings.enableCelestialEvents) return { items: [] };
 
-        const rawEvents: { timeMs: number, text: string }[] = [];
+        const rawEvents: { time: Date, text: string }[] = [];
+        const dayStart = new Date(targetDate);
+        dayStart.setHours(0, 0, 0, 0);
         
-        // Use LOCAL day boundaries
-        const startDay = new Date(targetDate);
-        startDay.setHours(0,0,0,0);
-        
-        // 1. LUNAR EVENTS (Nodes, Perigee, etc.)
-        const lunarEvents = this.getLunarEvents(startDay); 
-        rawEvents.push(...lunarEvents);
+        // 1-Minute Resolution Scanner (1440 steps)
+        const steps = 1440;
+        const stepSize = 60000;
 
-        // 2. PLANETARY EVENTS (Conjunctions, Aspects, Stations)
-        const planetEvents = this.getPlanetaryEvents(startDay);
-        rawEvents.push(...planetEvents);
+        const planets = ['Mercury', 'Venus', 'Mars', 'Jupiter', 'Saturn', 'Uranus', 'Neptune', 'Pluto'];
 
-        // Sort events by time
-        rawEvents.sort((a, b) => a.timeMs - b.timeMs);
+        // Initial state
+        let prevMoon = this.getMoonPosition(dayStart);
+        let prevPlanets = new Map<string, any>();
+        planets.forEach(p => prevPlanets.set(p, this.getGeocentricPlanetPosition(p, dayStart)));
 
-        const items = rawEvents.map(e => e.text);
+        // 1. High-Resolution Scanner
+        // This loop handles Conjunctions, Nodes, Equator Crossings, and Peaks.
+        // It only performs calculations for toggled categories.
+        if (this.settings.enableBasicEvents || this.settings.enableAdvancedAstronomy) {
+            for (let i = 1; i <= steps; i++) {
+                const currentTime = new Date(dayStart.getTime() + i * stepSize);
+                const currMoon = this.getMoonPosition(currentTime);
+                const currPlanets = new Map<string, any>();
+                planets.forEach(p => currPlanets.set(p, this.getGeocentricPlanetPosition(p, currentTime)));
 
-        // 3. METEOR SHOWERS
-        const meteors = this.getMeteorShower(targetDate);
-        if (meteors) {
-            items.push(`🌠 **Meteor Shower:** ${meteors}`);
+                // --- A. CONJUNCTIONS (Geocentric Right Ascension) ---
+                if (this.settings.enableBasicEvents) {
+                    planets.forEach(p => {
+                        const p1 = prevPlanets.get(p);
+                        const p2 = currPlanets.get(p);
+                        
+                        const d1 = this.normalizeRA(prevMoon.ra - p1.ra);
+                        const d2 = this.normalizeRA(currMoon.ra - p2.ra);
+
+                        if (d1 * d2 <= 0 && Math.abs(d1 - d2) < 1) {
+                            const symbol = this.getPlanetSymbol(p);
+                            rawEvents.push({ 
+                                time: currentTime, 
+                                text: `${this.formatTime(currentTime)} ☌ ☾ ${symbol} **Conjunction**` 
+                            });
+                        }
+                    });
+
+                    // --- B. MOON NODES (Latitude Crossing) ---
+                    if (prevMoon.lat * currMoon.lat <= 0) {
+                        const label = currMoon.lat > prevMoon.lat ? 'at ☊ (Ascending)' : 'at ☋ (Descending)';
+                        rawEvents.push({ 
+                            time: currentTime, 
+                            text: `${this.formatTime(currentTime)} ☽ **${label} Node**` 
+                        });
+                    }
+                }
+
+                // --- C. ADVANCED EVENTS ---
+                if (this.settings.enableAdvancedAstronomy) {
+                    // Equator Crossing
+                    if (prevMoon.dec * currMoon.dec <= 0) {
+                        const label = currMoon.dec > prevMoon.dec ? 'crosses Equator North' : 'crosses Equator South';
+                        rawEvents.push({ time: currentTime, text: `${this.formatTime(currentTime)} ☽ **${label}**` });
+                    }
+
+                    if (i > 1) {
+                        const t0 = new Date(dayStart.getTime() + (i-2) * stepSize);
+                        const moon0 = this.getMoonPosition(t0);
+                        
+                        const vDec1 = prevMoon.dec - moon0.dec;
+                        const vDec2 = currMoon.dec - prevMoon.dec;
+                        if (vDec1 * vDec2 < 0 && Math.abs(vDec1) > 0) {
+                            const label = prevMoon.dec > 0 ? 'runs High' : 'runs Low';
+                            rawEvents.push({ time: currentTime, text: `${this.formatTime(currentTime)} ☽ **${label}**` });
+                        }
+
+                        const vDist1 = prevMoon.dist - moon0.dist;
+                        const vDist2 = currMoon.dist - prevMoon.dist;
+                        if (vDist1 * vDist2 < 0 && Math.abs(vDist1) > 0) {
+                            const label = vDist1 > 0 ? 'at Apogee (Furthest)' : 'at Perigee (Closest)';
+                            rawEvents.push({ time: currentTime, text: `${this.formatTime(currentTime)} ☽ **${label}**` });
+                        }
+                    }
+                }
+
+                prevMoon = currMoon;
+                prevPlanets = currPlanets;
+            }
         }
 
-        return { items };
+        // 2. METEOR SHOWERS (Always checked if Celestial Events are enabled)
+        if (this.settings.enableMeteorShowers) {
+            const shower = this.getMeteorShower(targetDate);
+            if (shower) rawEvents.push({ time: dayStart, text: `🌠 **Meteor Shower:** ${shower}` });
+        }
+
+        rawEvents.sort((a, b) => a.time.getTime() - b.time.getTime());
+        const uniqueItems = [...new Set(rawEvents.map(e => e.text))];
+
+        return { items: uniqueItems };
+    }
+
+    private getJulianDate(date: Date): number {
+        return (date.getTime() / 86400000.0) + 2440587.5;
+    }
+
+    private getMoonPosition(date: Date) {
+        const d = this.getJulianDate(date) - 2451545.0;
+
+        const L = this.rev(218.316 + 13.176396 * d); 
+        const M = this.rev(134.963 + 13.064993 * d); 
+        const F = this.rev(93.272 + 13.229350 * d);  
+        const D = this.rev(297.850 + 12.190749 * d); 
+
+        let lon = L + 6.289 * Math.sin(this.rad(M)) 
+                    + 1.274 * Math.sin(this.rad(2 * D - M))
+                    + 0.658 * Math.sin(this.rad(2 * D))
+                    + 0.214 * Math.sin(this.rad(2 * M))
+                    - 0.186 * Math.sin(this.rad(this.rev(357.529 + 0.9856 * d)));
+        
+        let lat = 5.128 * Math.sin(this.rad(F))
+                    + 0.280 * Math.sin(this.rad(M + F))
+                    + 0.277 * Math.sin(this.rad(M - F))
+                    + 0.173 * Math.sin(this.rad(2 * D - F));
+
+        const dist = 385001 - 20905 * Math.cos(this.rad(M))
+                            - 3699 * Math.cos(this.rad(2 * D - M))
+                            - 2956 * Math.cos(this.rad(2 * D));
+
+        const ecl = this.rad(23.4393 - 0.0000004 * d);
+        const rLon = this.rad(lon);
+        const rLat = this.rad(lat);
+
+        const ra = this.rev(this.deg(Math.atan2(
+            Math.sin(rLon) * Math.cos(ecl) - Math.tan(rLat) * Math.sin(ecl),
+            Math.cos(rLon)
+        ))) / 15;
+
+        const dec = this.deg(Math.asin(
+            Math.sin(rLat) * Math.cos(ecl) + Math.cos(rLat) * Math.sin(ecl) * Math.sin(rLon)
+        ));
+
+        return { ra, dec, lat, dist };
+    }
+
+    private getGeocentricPlanetPosition(name: string, date: Date) {
+        const d = this.getJulianDate(date) - 2451545.0;
+
+        const sunL = this.rev(280.466 + 0.985647 * d);
+        const sunM = this.rev(357.529 + 0.985600 * d);
+        const sunR = 1.00014 - 0.01671 * Math.cos(this.rad(sunM));
+        const sunLon = this.rev(sunL + 1.915 * Math.sin(this.rad(sunM)));
+
+        const elements: any = {
+            'Mercury': { L: 252.25, v: 4.09233, e: 0.2056, M: 174.79, a: 0.3871 },
+            'Venus':   { L: 181.98, v: 1.60213, e: 0.0067, M: 50.40,  a: 0.7233 },
+            'Mars':    { L: 355.45, v: 0.52402, e: 0.0934, M: 19.38,  a: 1.5237 },
+            'Jupiter': { L: 34.40,  v: 0.08308, e: 0.0484, M: 20.02,  a: 5.2026 },
+            'Saturn':  { L: 49.94,  v: 0.03344, e: 0.0541, M: 317.02, a: 9.5549 },
+            'Uranus':  { L: 313.23, v: 0.01173, e: 0.0471, M: 142.59, a: 19.2184 },
+            'Neptune': { L: 304.88, v: 0.00598, e: 0.0086, M: 260.24, a: 30.1104 },
+            'Pluto':   { L: 238.93, v: 0.00397, e: 0.2488, M: 14.86,  a: 39.482 }
+        };
+
+        const el = elements[name];
+        if (!el) return { ra: 0 };
+
+        const pM = this.rev(el.M + el.v * d);
+        const pHeliolon = this.rev(el.L + el.v * d + (360/Math.PI) * el.e * Math.sin(this.rad(pM)));
+        const pR = el.a * (1 - el.e * el.e) / (1 + el.e * Math.cos(this.rad(pM)));
+
+        const x = pR * Math.cos(this.rad(pHeliolon)) + sunR * Math.cos(this.rad(sunLon));
+        const y = pR * Math.sin(this.rad(pHeliolon)) + sunR * Math.sin(this.rad(sunLon));
+        const lon = this.rev(this.deg(Math.atan2(y, x)));
+
+        const ecl = this.rad(23.439);
+        const ra = this.rev(this.deg(Math.atan2(
+            Math.sin(this.rad(lon)) * Math.cos(ecl),
+            Math.cos(this.rad(lon))
+        ))) / 15;
+
+        return { ra };
+    }
+
+    private rad(deg: number) { return deg * Math.PI / 180; }
+    private deg(rad: number) { return rad * 180 / Math.PI; }
+    private rev(deg: number) { 
+        let a = deg % 360;
+        if (a < 0) a += 360;
+        return a;
+    }
+    private normalizeRA(diff: number) {
+        let d = diff;
+        while (d < -12) d += 24;
+        while (d > 12) d -= 24;
+        return d;
+    }
+
+    private getPlanetSymbol(name: string): string {
+        const symbols: any = {
+            'Mercury': '☿', 'Venus': '♀', 'Mars': '♂', 
+            'Jupiter': '♃', 'Saturn': '♄', 'Uranus': '⛢', 'Neptune': '♆',
+            'Pluto': '♇'
+        };
+        return symbols[name] || '';
     }
 
     private formatTime(date: Date): string {
         const hours = date.getHours();
         const minutes = date.getMinutes();
         const mStr = minutes < 10 ? '0' + minutes : minutes;
-        
         if (this.settings.use24HourFormat) {
             const hStr = hours < 10 ? '0' + hours : hours;
             return `${hStr}:${mStr}`;
@@ -57,335 +238,22 @@ export class CelestialEventsProvider implements SparkProvider {
         }
     }
 
-    // --- EVENT DETECTORS ---
-
-    private getLunarEvents(date: Date): { timeMs: number, text: string }[] {
-        const events: { timeMs: number, text: string }[] = [];
-        const steps = 24; 
-        
-        let prevPos = this.getMoonFullPos(date, 0);
-        let distTrend = 0; 
-        let decTrend = 0;
-
-        for (let i = 1; i <= steps; i++) {
-            const t = new Date(date.getTime() + (i * 3600000));
-            const currPos = this.getMoonFullPos(t, 0);
-
-            const getEventTime = (prevVal: number, currVal: number, target: number = 0) => {
-                const fraction = (target - prevVal) / (currVal - prevVal);
-                return date.getTime() + ((i - 1) * 3600000) + (fraction * 3600000);
-            };
-
-            // A. NODES (Latitude crossing 0)
-            if (Math.sign(prevPos.lat) !== Math.sign(currPos.lat)) {
-                const timeMs = getEventTime(prevPos.lat, currPos.lat, 0);
-                const timeStr = this.formatTime(new Date(timeMs));
-                if (prevPos.lat < 0) events.push({ timeMs, text: `${timeStr} ☽ **at ☊** (Ascending Node)` });
-                else events.push({ timeMs, text: `${timeStr} ☽ **at ☋** (Descending Node)` });
-            }
-
-            if (this.settings.showAdvancedAstronomy) {
-                if (Math.sign(prevPos.dec) !== Math.sign(currPos.dec)) {
-                    const timeMs = getEventTime(prevPos.dec, currPos.dec, 0);
-                    const timeStr = this.formatTime(new Date(timeMs));
-                    events.push({ timeMs, text: `${timeStr} ☽ **on Eq.** (Crosses Equator)` });
-                }
-
-                const currDistTrend = Math.sign(currPos.dist - prevPos.dist);
-                if (distTrend !== 0 && currDistTrend !== distTrend) {
-                    const timeMs = t.getTime(); 
-                    const timeStr = this.formatTime(t);
-                    if (distTrend < 0) events.push({ timeMs, text: `${timeStr} ☽ **at Perig.** (Closest)` });
-                    else events.push({ timeMs, text: `${timeStr} ☽ **at Apo.** (Furthest)` });
-                }
-                distTrend = currDistTrend;
-
-                const currDecTrend = Math.sign(currPos.dec - prevPos.dec);
-                if (decTrend !== 0 && currDecTrend !== decTrend) {
-                    if (Math.abs(currPos.dec) > 18) {
-                        const timeMs = t.getTime();
-                        const timeStr = this.formatTime(t);
-                        if (decTrend > 0) events.push({ timeMs, text: `${timeStr} ☽ **runs High**` });
-                        else events.push({ timeMs, text: `${timeStr} ☽ **runs Low**` });
-                    }
-                }
-                decTrend = currDecTrend;
-            }
-
-            prevPos = currPos;
-        }
-        
-        const uniqueEvents = new Map();
-        for (const e of events) { uniqueEvents.set(e.text, e); }
-        return Array.from(uniqueEvents.values());
-    }
-
-    private getPlanetaryEvents(date: Date): { timeMs: number, text: string }[] {
-        const events: { timeMs: number, text: string }[] = [];
-        const bodies = [
-            { id: 'sun', name: 'Sun', symbol: '☉' },
-            { id: 'mercury', name: 'Mercury', symbol: '☿' },
-            { id: 'venus', name: 'Venus', symbol: '♀' },
-            { id: 'mars', name: 'Mars', symbol: '♂' },
-            { id: 'jupiter', name: 'Jupiter', symbol: '♃' },
-            { id: 'saturn', name: 'Saturn', symbol: '♄' },
-            { id: 'uranus', name: 'Uranus', symbol: '♅' },
-            { id: 'neptune', name: 'Neptune', symbol: '♆' }
-        ];
-
-        if (this.settings.showDeepAstrology) {
-            bodies.push({ id: 'pluto', name: 'Pluto', symbol: '♇' });
-            bodies.push({ id: 'chiron', name: 'Chiron', symbol: '⚷' });
-            bodies.push({ id: 'node', name: 'Node', symbol: '☊' });
-        }
-
-        const posStart: any = {};
-        const posEnd: any = {};
-        
-        const startDay = new Date(date); startDay.setHours(0,0,0,0);
-        const endDay = new Date(date); endDay.setHours(23,59,59,999);
-        const prevDay = new Date(startDay.getTime() - 86400000);
-        const nextDay = new Date(endDay.getTime() + 86400000);
-
-        for (const body of bodies) {
-            posStart[body.id] = this.getBodyLongitude(startDay, body.id);
-            posEnd[body.id] = this.getBodyLongitude(endDay, body.id);
-            
-            if (this.settings.showRetrogrades && body.id !== 'node' && body.id !== 'sun') {
-                const lonPrev = this.getBodyLongitude(prevDay, body.id);
-                const lonCurr = posStart[body.id];
-                const lonNext = this.getBodyLongitude(nextDay, body.id);
-                
-                let v1 = lonCurr - lonPrev;
-                let v2 = lonNext - lonCurr;
-                if (v1 < -180) v1 += 360; if (v1 > 180) v1 -= 360;
-                if (v2 < -180) v2 += 360; if (v2 > 180) v2 -= 360;
-
-                if (Math.sign(v1) !== Math.sign(v2) && Math.abs(v1) > 0.0001) {
-                    const timeMs = startDay.getTime() + (12 * 3600000);
-                    events.push({ timeMs, text: `${body.symbol} **stat.** (${body.name} Stationary)` });
-                }
-            }
-        }
-
-        const moonStart = this.getMoonFullPos(startDay, 0).lon;
-        const moonEnd = this.getMoonFullPos(endDay, 0).lon;
-
-        // 1. Moon vs Planets
-        for (const body of bodies) {
-            this.scanAspectsHourly(events, 'Moon', '☾', body, startDay, 24, true);
-        }
-
-        // 2. Planet vs Planet
-        for (let i = 0; i < bodies.length; i++) {
-            for (let j = i + 1; j < bodies.length; j++) {
-                const b1 = bodies[i];
-                const b2 = bodies[j];
-                if (b1.id === 'uranus' && b2.id === 'neptune') continue;
-                if ((b1.id === 'node' || b2.id === 'node') && !this.settings.showDeepAstrology) continue;
-                if ((b1.id === 'sun' || b2.id === 'sun') && (b1.id === 'chiron' || b2.id === 'chiron')) continue;
-
-                this.checkAspects(events, b1.name, b1.symbol, posStart[b1.id], posEnd[b1.id], b2.name, b2.symbol, posStart[b2.id], posEnd[b2.id], startDay.getTime(), 24*3600000, false);
-            }
-        }
-
-        return events;
-    }
-
-    private scanAspectsHourly(events: { timeMs: number, text: string }[], name1: string, sym1: string, body2: any, date: Date, steps: number, isMoonScan: boolean) {
-        let prevLon1 = this.getMoonFullPos(date, 0).lon;
-        let prevLon2 = this.getBodyLongitude(date, body2.id);
-
-        for (let i = 1; i <= steps; i++) {
-            const t = new Date(date.getTime() + (i * 3600000));
-            const currLon1 = this.getMoonFullPos(t, 0).lon;
-            const currLon2 = this.getBodyLongitude(t, body2.id);
-            
-            const segmentStartMs = date.getTime() + ((i - 1) * 3600000);
-            
-            this.checkAspects(
-                events, 
-                name1, sym1, 
-                prevLon1, currLon1, 
-                body2.name, body2.symbol, 
-                prevLon2, currLon2, 
-                segmentStartMs, 
-                3600000, 
-                body2.id === 'node'
-            );
-
-            prevLon1 = currLon1;
-            prevLon2 = currLon2;
-        }
-    }
-
-    private checkAspects(events: { timeMs: number, text: string }[], name1: string, sym1: string, start1: number, end1: number, name2: string, sym2: string, start2: number, end2: number, startTimeMs: number, durationMs: number, isMoonNode: boolean) {
-        let diffStart = start1 - start2;
-        let diffEnd = end1 - end2;
-
-        const checkCrossing = (targetAngle: number, symbol: string, label: string) => {
-            if (isMoonNode && (targetAngle === 0 || targetAngle === 180)) return;
-
-            let d1 = diffStart - targetAngle;
-            let d2 = diffEnd - targetAngle;
-            while (d1 < -180) d1 += 360; while (d1 > 180) d1 -= 360;
-            while (d2 < -180) d2 += 360; while (d2 > 180) d2 -= 360;
-
-            if (Math.sign(d1) !== Math.sign(d2) && Math.abs(d1 - d2) < 20) {
-                const fraction = (0 - d1) / (d2 - d1);
-                const timeMs = startTimeMs + (fraction * durationMs);
-                const timeStr = this.formatTime(new Date(timeMs));
-                events.push({ timeMs, text: `${timeStr} ${symbol} **${label}:** ${sym1} ${sym2} (${name1} & ${name2})` });
-            }
-            
-            if (targetAngle !== 0 && targetAngle !== 180) {
-                 let d1_neg = diffStart - (-targetAngle);
-                 let d2_neg = diffEnd - (-targetAngle);
-                 while (d1_neg < -180) d1_neg += 360; while (d1_neg > 180) d1_neg -= 360;
-                 while (d2_neg < -180) d2_neg += 360; while (d2_neg > 180) d2_neg -= 360;
-                 
-                 if (Math.sign(d1_neg) !== Math.sign(d2_neg) && Math.abs(d1_neg - d2_neg) < 20) {
-                    const fraction = (0 - d1_neg) / (d2_neg - d1_neg);
-                    const timeMs = startTimeMs + (fraction * durationMs);
-                    const timeStr = this.formatTime(new Date(timeMs));
-                    events.push({ timeMs, text: `${timeStr} ${symbol} **${label}:** ${sym1} ${sym2} (${name1} & ${name2})` });
-                 }
-            }
-        };
-
-        checkCrossing(0, '☌', 'Conjunction');
-        checkCrossing(180, '☍', 'Opposition');
-
-        if (this.settings.showAstrology || this.settings.showDeepAstrology) {
-            checkCrossing(120, '△', 'Trine');
-            checkCrossing(90, '□', 'Square');
-            checkCrossing(60, '⚹', 'Sextile');
-        }
-
-        if (this.settings.showDeepAstrology) {
-            checkCrossing(30, '⚺', 'Semi-Sextile');
-            checkCrossing(45, '∠', 'Semi-Square');
-            checkCrossing(72, '⬠', 'Quintile');
-            checkCrossing(135, '⚼', 'Sesquiquadrate');
-            checkCrossing(144, 'bQ', 'Bi-Quintile');
-        }
-    }
-
-    // --- MATH ENGINE (Bodies) ---
-    private getBodyLongitude(date: Date, bodyId: string): number {
-        const d = (date.getTime() / 86400000) - 10957.5; 
-        
-        if (bodyId === 'node') {
-            let omega = 125.04452 - 0.0529535 * d;
-            return (omega % 360 + 360) % 360;
-        }
-
-        if (bodyId === 'sun') {
-             return this.getSunPosition(date).eclipticLongitude;
-        }
-
-        const rad = Math.PI / 180;
-        // UPDATED: Tuned Elements (Epoch ~J2025 where possible for fast movers)
-        const elems: any = {
-            mercury: { N: 48.331, i: 7.005, w: 29.124, a: 0.387098, e: 0.20563, M: 168.656 + 4.0923344 * d },
-            // Venus Tuned
-            venus:   { N: 76.680, i: 3.395, w: 54.884, a: 0.723332, e: 0.00677, M: 50.4 + 1.6021302 * d },
-            mars:    { N: 49.558, i: 1.850, w: 286.502, a: 1.523679, e: 0.09340, M: 18.602 + 0.5240208 * d },
-            // Jupiter Tuned
-            jupiter: { N: 100.464, i: 1.303, w: 273.867, a: 5.2044, e: 0.0489, M: 20.0 + 0.0830853 * d },
-            saturn:  { N: 113.665, i: 2.485, w: 339.392, a: 9.5826, e: 0.0565, M: 316.967 + 0.0334442 * d },
-            uranus:  { N: 74.006, i: 0.773, w: 96.998, a: 19.2184, e: 0.0463, M: 142.590 + 0.0117258 * d },
-            neptune: { N: 131.784, i: 1.768, w: 273.187, a: 30.1104, e: 0.0094, M: 260.247 + 0.0059951 * d },
-            pluto:   { N: 110.303, i: 17.142, w: 113.763, a: 39.482, e: 0.2488, M: 14.882 + 0.00396 * d },
-            // CHIRON FIXED: Epoch ~2020 (M adjusted from 339 to ~200 deg shift)
-            chiron:  { N: 69.8, i: 6.9, w: 339.6, a: 13.7, e: 0.383, M: 100.0 + 0.019 * d } 
-        };
-
-        const p = elems[bodyId];
-        if (!p) return 0;
-
-        let E = p.M + (180/Math.PI) * p.e * Math.sin(p.M * rad) * (1 + p.e * Math.cos(p.M * rad));
-        for(let j=0; j<7; j++) { 
-            const E_rad = E * rad;
-            const M_calc = E - (180/Math.PI) * p.e * Math.sin(E_rad);
-            E = E + (p.M - M_calc);
-        }
-
-        const xv = p.a * (Math.cos(E * rad) - p.e);
-        const yv = p.a * Math.sqrt(1 - p.e*p.e) * Math.sin(E * rad);
-        const r = Math.sqrt(xv*xv + yv*yv); 
-        const xh = r * (Math.cos(p.N*rad) * Math.cos((p.w + Math.atan2(yv, xv) * (180/Math.PI))*rad) - Math.sin(p.N*rad) * Math.sin((p.w + Math.atan2(yv, xv) * (180/Math.PI))*rad) * Math.cos(p.i*rad));
-        const yh = r * (Math.sin(p.N*rad) * Math.cos((p.w + Math.atan2(yv, xv) * (180/Math.PI))*rad) + Math.cos(p.N*rad) * Math.sin((p.w + Math.atan2(yv, xv) * (180/Math.PI))*rad) * Math.cos(p.i*rad));
-        
-        // Earth
-        const Me = 357.529 + 0.98560028 * d;
-        const Le = 280.466 + 0.98564736 * d;
-        const le = Le + 1.915 * Math.sin(Me*rad) + 0.020 * Math.sin(2*Me*rad);
-        const Re = 1.00014 - 0.01671 * Math.cos(Me*rad) - 0.00014 * Math.cos(2*Me*rad);
-        const xe = Re * Math.cos(le*rad);
-        const ye = Re * Math.sin(le*rad);
-
-        // Geocentric
-        const xg = xh + xe;
-        const yg = yh + ye;
-        
-        const lon = Math.atan2(yg, xg) * (180/Math.PI);
-        return (lon + 360) % 360;
-    }
-
-    private getMoonFullPos(date: Date, offsetDays: number = 0) {
-        const t = new Date(date.getTime() + (offsetDays * 86400000));
-        const d = (t.getTime() / 86400000) - 10957.5;
-        const rad = Math.PI / 180;
-
-        const L = (218.316 + 13.176396 * d) * rad;
-        const M = (134.963 + 13.064993 * d) * rad;
-        const F = (93.272 + 13.229350 * d) * rad;
-        const D = (297.850 + 12.190749 * d) * rad; 
-        const Ms = (357.529 + 0.98560028 * d) * rad;
-
-        let l = L + 6.289 * rad * Math.sin(M);
-        l += 1.274 * rad * Math.sin(2 * D - M);
-        l += 0.658 * rad * Math.sin(2 * D);
-        l += -0.185 * rad * Math.sin(Ms);
-        l += -0.114 * rad * Math.sin(2 * F);
-
-        let b = 5.128 * rad * Math.sin(F);
-        b += 0.280 * rad * Math.sin(M + F);
-        b += 0.278 * rad * Math.sin(M - F);
-        b += 0.173 * rad * Math.sin(2 * D - F);
-
-        let dist = 385000.56;
-        dist += -20905.355 * Math.cos(M);
-        dist += -3699.111 * Math.cos(2*D - M);
-        dist += -2955.968 * Math.cos(2*D);
-
-        const obl = 23.439 * rad;
-        const sinDec = Math.sin(b) * Math.cos(obl) + Math.cos(b) * Math.sin(obl) * Math.sin(l);
-        const dec = Math.asin(sinDec) * (180/Math.PI);
-
-        return {
-            lon: l * (180/Math.PI) % 360,
-            lat: b * (180/Math.PI),
-            dist: dist,
-            dec: dec
-        };
-    }
-
-    private getSunPosition(date: Date) {
-        const d = (date.getTime() / 86400000) - 10957.5;
-        const rad = Math.PI / 180;
-        const M = (357.529 + 0.98560028 * d) * rad;
-        const L = (280.466 + 0.98564736 * d) * rad;
-        const l = L + 1.915 * rad * Math.sin(M) + 0.020 * rad * Math.sin(2 * M);
-        return { eclipticLongitude: l * (180 / Math.PI) };
-    }
-
     private getMeteorShower(date: Date): string | null {
-        const showers = [ { name: "Quadrantids", m: 0, d: 3, range: 2 }, { name: "Lyrids", m: 3, d: 22, range: 1 }, { name: "Eta Aquariids", m: 4, d: 6, range: 2 }, { name: "Perseids", m: 7, d: 12, range: 2 }, { name: "Orionids", m: 9, d: 21, range: 2 }, { name: "Leonids", m: 10, d: 17, range: 1 }, { name: "Geminids", m: 11, d: 14, range: 2 }, { name: "Ursids", m: 11, d: 22, range: 1 } ];
+        const showers = [ 
+            { name: "Quadrantids", m: 0, d: 3, range: 2 }, 
+            { name: "Lyrids", m: 3, d: 22, range: 1 }, 
+            { name: "Eta Aquariids", m: 4, d: 6, range: 2 }, 
+            { name: "Perseids", m: 7, d: 12, range: 2 }, 
+            { name: "Orionids", m: 9, d: 21, range: 2 }, 
+            { name: "Leonids", m: 10, d: 17, range: 1 }, 
+            { name: "Geminids", m: 11, d: 14, range: 2 }, 
+            { name: "Ursids", m: 11, d: 22, range: 1 } 
+        ];
         const m = date.getMonth();
         const d = date.getDate();
-        for (const s of showers) { if (m === s.m && Math.abs(d - s.d) <= s.range) { return `${s.name} (Peak)`; } }
+        for (const s of showers) { 
+            if (m === s.m && Math.abs(d - s.d) <= s.range) return `${s.name} (Peak)`; 
+        }
         return null;
     }
 }

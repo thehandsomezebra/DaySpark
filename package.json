@@ -22,6 +22,7 @@
     "typescript": "4.7.4"
   },
   "dependencies": {
+    "astronomy-engine": "^2.1.19",
     "ical.js": "^1.5.0"
   }
 }

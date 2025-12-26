@@ -26,6 +26,9 @@ export interface DaySparkSettings {
 
     // Moon Settings
     enableMoon: boolean;
+    enableMoonTimes: boolean; 
+    enableMoonAge: boolean;
+    enableMoonPosition: boolean;
     moonHeader: string;
 
     // Sun Settings
@@ -45,6 +48,9 @@ export interface DaySparkSettings {
 
     // Season Settings
     enableSeasons: boolean;
+    seasonsHeader: string;
+    enableMeteorologicalSeasons: boolean;
+    enableCrossQuarterDays: boolean;
 
     // Weather Settings
     enableWeather: boolean;
@@ -59,10 +65,9 @@ export interface DaySparkSettings {
     // Celestial Events Settings
     enableCelestialEvents: boolean; 
     celestialHeader: string;
-    showRetrogrades: boolean;       
-    showAdvancedAstronomy: boolean; 
-    showAstrology: boolean;         // Basic: Trine, Square, Sextile
-    showDeepAstrology: boolean;     // Advanced: Quintiles, Semi-Squares, Chiron, Pluto, Node Aspects
+    enableBasicEvents: boolean;      
+    enableMeteorShowers: boolean;    
+    enableAdvancedAstronomy: boolean; 
 
     // General Behavior
     replaceContext: boolean;
@@ -80,6 +85,9 @@ export const DEFAULT_SETTINGS: DaySparkSettings = {
         }
     ],
     enableMoon: true,
+    enableMoonTimes: true, 
+    enableMoonAge: true,
+    enableMoonPosition: true,
     moonHeader: '## Moon Phase',
     enableSun: true,
     sunHeader: '## Daily Context',
@@ -87,10 +95,13 @@ export const DEFAULT_SETTINGS: DaySparkSettings = {
     longitude: -74.0060,
     use24HourFormat: false,
     enableAlmanac: true,
-    almanacHeader: '## Almanac',
+    almanacHeader: '## Almanac Lore',
     enablePlanets: true,
     planetHeader: '## Sky Watch',
     enableSeasons: true,
+    seasonsHeader: '## Seasons',
+    enableMeteorologicalSeasons: false,
+    enableCrossQuarterDays: true, // Defaulted to on for Almanac accuracy
     enableWeather: true,
     weatherHeader: '## Weather',
     useMetric: false,
@@ -99,11 +110,9 @@ export const DEFAULT_SETTINGS: DaySparkSettings = {
     historyLimit: 5,
     replaceContext: true,
     
-    // Celestial Defaults
     enableCelestialEvents: true,
     celestialHeader: '## Celestial Events',
-    showRetrogrades: true,
-    showAdvancedAstronomy: true,
-    showAstrology: false,
-    showDeepAstrology: false // Default Off to keep it simple for normal users
+    enableBasicEvents: false,
+    enableMeteorShowers: true,
+    enableAdvancedAstronomy: false
 };
