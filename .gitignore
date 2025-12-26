@@ -1,6 +1,8 @@
 #Build artifacts! Let the pipeline make these
 main.js
 
+#My stuff
+data.json
 
 # Logs
 logs
