@@ -14,6 +14,13 @@ Unlike standard template plugins that just paste a date, DaySpark calculates the
 - **Grouping:** Organize events into "Work," "Personal," or "Birthdays" groups with their own custom headers.
 - **Time Travel:** Correctly fetches past events for historical notes, keeping your archives accurate.
 
+- Ideas for calendars:
+    - [Office US Holidays calendar](https://www.officeholidays.com/ics/usa)
+    - [TV Guide](https://episodecalendar.com/)
+    - Sports schedules (MLB and NHL might provide some ics links)
+    - [Sync2Cal](https://www.sync2cal.com/) might be able to get some ics
+
+
 ### 🌑 Precision Astronomy (Almanac Style)
 
 - **Moon Phase:** Calculates phase and illumination percentage using high-precision geocentric algorithms.
