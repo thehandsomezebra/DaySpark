@@ -26,7 +26,7 @@ Unlike standard template plugins that just paste a date, DaySpark calculates the
 - **Conjunctions:** Identifies when planets or the Moon align in Right Ascension (e.g., `☌ ☾ ♄`).
 - **Meteor Showers:** Alerts you to major meteor shower peaks (e.g., Perseids, Geminids).
 - **Lunar Events:** Tracks Lunar Nodes (`at ☊`), Equator crossings (`crosses Eq.`), and distance extremes (`at Perigee` / `at Apogee`).
-- **Planetary Stations:** (Optional) Can be configured to track when planets turn Retrograde or Direct.
+
 
 ### 🪐 Sky Watch
 
