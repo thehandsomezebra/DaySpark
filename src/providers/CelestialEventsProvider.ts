@@ -16,11 +16,12 @@ export class CelestialEventsProvider implements SparkProvider {
 
         const rawEvents: { timeMs: number, text: string }[] = [];
         
+        // Use LOCAL day boundaries
         const startDay = new Date(targetDate);
-        startDay.setUTCHours(0,0,0,0);
+        startDay.setHours(0,0,0,0);
         
         // 1. LUNAR EVENTS (Nodes, Perigee, etc.)
-        const lunarEvents = this.getLunarEvents(startDay);
+        const lunarEvents = this.getLunarEvents(startDay); 
         rawEvents.push(...lunarEvents);
 
         // 2. PLANETARY EVENTS (Conjunctions, Aspects, Stations)
@@ -76,7 +77,6 @@ export class CelestialEventsProvider implements SparkProvider {
             };
 
             // A. NODES (Latitude crossing 0)
-            // This IS the "Conjunction with Node"
             if (Math.sign(prevPos.lat) !== Math.sign(currPos.lat)) {
                 const timeMs = getEventTime(prevPos.lat, currPos.lat, 0);
                 const timeStr = this.formatTime(new Date(timeMs));
@@ -142,8 +142,8 @@ export class CelestialEventsProvider implements SparkProvider {
         const posStart: any = {};
         const posEnd: any = {};
         
-        const startDay = new Date(date); startDay.setUTCHours(0,0,0,0);
-        const endDay = new Date(date); endDay.setUTCHours(23,59,59,999);
+        const startDay = new Date(date); startDay.setHours(0,0,0,0);
+        const endDay = new Date(date); endDay.setHours(23,59,59,999);
         const prevDay = new Date(startDay.getTime() - 86400000);
         const nextDay = new Date(endDay.getTime() + 86400000);
 
@@ -173,8 +173,7 @@ export class CelestialEventsProvider implements SparkProvider {
 
         // 1. Moon vs Planets
         for (const body of bodies) {
-            // FIX: Pass check for Node to avoid duplicate Conjunctions
-            this.checkAspects(events, 'Moon', '☾', moonStart, moonEnd, body.name, body.symbol, posStart[body.id], posEnd[body.id], startDay.getTime(), body.id === 'node');
+            this.scanAspectsHourly(events, 'Moon', '☾', body, startDay, 24, true);
         }
 
         // 2. Planet vs Planet
@@ -184,21 +183,47 @@ export class CelestialEventsProvider implements SparkProvider {
                 const b2 = bodies[j];
                 if (b1.id === 'uranus' && b2.id === 'neptune') continue;
                 if ((b1.id === 'node' || b2.id === 'node') && !this.settings.showDeepAstrology) continue;
+                if ((b1.id === 'sun' || b2.id === 'sun') && (b1.id === 'chiron' || b2.id === 'chiron')) continue;
 
-                this.checkAspects(events, b1.name, b1.symbol, posStart[b1.id], posEnd[b1.id], b2.name, b2.symbol, posStart[b2.id], posEnd[b2.id], startDay.getTime(), false);
+                this.checkAspects(events, b1.name, b1.symbol, posStart[b1.id], posEnd[b1.id], b2.name, b2.symbol, posStart[b2.id], posEnd[b2.id], startDay.getTime(), 24*3600000, false);
             }
         }
 
         return events;
     }
 
-    private checkAspects(events: { timeMs: number, text: string }[], name1: string, sym1: string, start1: number, end1: number, name2: string, sym2: string, start2: number, end2: number, startTimeMs: number, isMoonNode: boolean) {
+    private scanAspectsHourly(events: { timeMs: number, text: string }[], name1: string, sym1: string, body2: any, date: Date, steps: number, isMoonScan: boolean) {
+        let prevLon1 = this.getMoonFullPos(date, 0).lon;
+        let prevLon2 = this.getBodyLongitude(date, body2.id);
+
+        for (let i = 1; i <= steps; i++) {
+            const t = new Date(date.getTime() + (i * 3600000));
+            const currLon1 = this.getMoonFullPos(t, 0).lon;
+            const currLon2 = this.getBodyLongitude(t, body2.id);
+            
+            const segmentStartMs = date.getTime() + ((i - 1) * 3600000);
+            
+            this.checkAspects(
+                events, 
+                name1, sym1, 
+                prevLon1, currLon1, 
+                body2.name, body2.symbol, 
+                prevLon2, currLon2, 
+                segmentStartMs, 
+                3600000, 
+                body2.id === 'node'
+            );
+
+            prevLon1 = currLon1;
+            prevLon2 = currLon2;
+        }
+    }
+
+    private checkAspects(events: { timeMs: number, text: string }[], name1: string, sym1: string, start1: number, end1: number, name2: string, sym2: string, start2: number, end2: number, startTimeMs: number, durationMs: number, isMoonNode: boolean) {
         let diffStart = start1 - start2;
         let diffEnd = end1 - end2;
 
         const checkCrossing = (targetAngle: number, symbol: string, label: string) => {
-            // Prevent duplicate Conjunction (0) or Opposition (180) for Moon-Node
-            // because 'at ☊' and 'at ☋' already cover these physical events.
             if (isMoonNode && (targetAngle === 0 || targetAngle === 180)) return;
 
             let d1 = diffStart - targetAngle;
@@ -208,7 +233,7 @@ export class CelestialEventsProvider implements SparkProvider {
 
             if (Math.sign(d1) !== Math.sign(d2) && Math.abs(d1 - d2) < 20) {
                 const fraction = (0 - d1) / (d2 - d1);
-                const timeMs = startTimeMs + (fraction * 86400000);
+                const timeMs = startTimeMs + (fraction * durationMs);
                 const timeStr = this.formatTime(new Date(timeMs));
                 events.push({ timeMs, text: `${timeStr} ${symbol} **${label}:** ${sym1} ${sym2} (${name1} & ${name2})` });
             }
@@ -221,7 +246,7 @@ export class CelestialEventsProvider implements SparkProvider {
                  
                  if (Math.sign(d1_neg) !== Math.sign(d2_neg) && Math.abs(d1_neg - d2_neg) < 20) {
                     const fraction = (0 - d1_neg) / (d2_neg - d1_neg);
-                    const timeMs = startTimeMs + (fraction * 86400000);
+                    const timeMs = startTimeMs + (fraction * durationMs);
                     const timeStr = this.formatTime(new Date(timeMs));
                     events.push({ timeMs, text: `${timeStr} ${symbol} **${label}:** ${sym1} ${sym2} (${name1} & ${name2})` });
                  }
@@ -260,23 +285,27 @@ export class CelestialEventsProvider implements SparkProvider {
         }
 
         const rad = Math.PI / 180;
+        // UPDATED: Tuned Elements (Epoch ~J2025 where possible for fast movers)
         const elems: any = {
-            mercury: { N: 48.3313, i: 7.0047, w: 29.1241, a: 0.387098, e: 0.205635, M: 168.6562 + 4.0923344368 * d },
-            venus:   { N: 76.6799, i: 3.3946, w: 54.8910, a: 0.723330, e: 0.006773, M: 48.0052 + 1.6021302244 * d },
-            mars:    { N: 49.5574, i: 1.8497, w: 286.5016, a: 1.523688, e: 0.093405, M: 18.6021 + 0.5240207766 * d },
-            jupiter: { N: 100.4542, i: 1.3030, w: 273.8777, a: 5.202561, e: 0.048498, M: 19.8950 + 0.0830853001 * d },
-            saturn:  { N: 113.6634, i: 2.4886, w: 339.3939, a: 9.55475, e: 0.055546, M: 316.9670 + 0.0334442282 * d },
-            uranus:  { N: 74.0005, i: 0.7733, w: 96.6612, a: 19.18171, e: 0.047318, M: 142.5905 + 0.011725806 * d },
-            neptune: { N: 131.7806, i: 1.7700, w: 272.8461, a: 30.05826, e: 0.008606, M: 260.2471 + 0.005995147 * d },
-            pluto:   { N: 110.30347, i: 17.14175, w: 224.06676, a: 39.48168677, e: 0.24880766, M: 14.882 + 0.00396 * d },
-            chiron:  { N: 209.3, i: 6.9, w: 339.4, a: 13.67, e: 0.38, M: 339.6 + 0.019 * d } 
+            mercury: { N: 48.331, i: 7.005, w: 29.124, a: 0.387098, e: 0.20563, M: 168.656 + 4.0923344 * d },
+            // Venus Tuned
+            venus:   { N: 76.680, i: 3.395, w: 54.884, a: 0.723332, e: 0.00677, M: 50.4 + 1.6021302 * d },
+            mars:    { N: 49.558, i: 1.850, w: 286.502, a: 1.523679, e: 0.09340, M: 18.602 + 0.5240208 * d },
+            // Jupiter Tuned
+            jupiter: { N: 100.464, i: 1.303, w: 273.867, a: 5.2044, e: 0.0489, M: 20.0 + 0.0830853 * d },
+            saturn:  { N: 113.665, i: 2.485, w: 339.392, a: 9.5826, e: 0.0565, M: 316.967 + 0.0334442 * d },
+            uranus:  { N: 74.006, i: 0.773, w: 96.998, a: 19.2184, e: 0.0463, M: 142.590 + 0.0117258 * d },
+            neptune: { N: 131.784, i: 1.768, w: 273.187, a: 30.1104, e: 0.0094, M: 260.247 + 0.0059951 * d },
+            pluto:   { N: 110.303, i: 17.142, w: 113.763, a: 39.482, e: 0.2488, M: 14.882 + 0.00396 * d },
+            // CHIRON FIXED: Epoch ~2020 (M adjusted from 339 to ~200 deg shift)
+            chiron:  { N: 69.8, i: 6.9, w: 339.6, a: 13.7, e: 0.383, M: 100.0 + 0.019 * d } 
         };
 
         const p = elems[bodyId];
         if (!p) return 0;
 
         let E = p.M + (180/Math.PI) * p.e * Math.sin(p.M * rad) * (1 + p.e * Math.cos(p.M * rad));
-        for(let j=0; j<5; j++) {
+        for(let j=0; j<7; j++) { 
             const E_rad = E * rad;
             const M_calc = E - (180/Math.PI) * p.e * Math.sin(E_rad);
             E = E + (p.M - M_calc);
@@ -353,25 +382,10 @@ export class CelestialEventsProvider implements SparkProvider {
     }
 
     private getMeteorShower(date: Date): string | null {
-        const showers = [
-            { name: "Quadrantids", m: 0, d: 3, range: 2 },
-            { name: "Lyrids", m: 3, d: 22, range: 1 },
-            { name: "Eta Aquariids", m: 4, d: 6, range: 2 },
-            { name: "Perseids", m: 7, d: 12, range: 2 },
-            { name: "Orionids", m: 9, d: 21, range: 2 },
-            { name: "Leonids", m: 10, d: 17, range: 1 },
-            { name: "Geminids", m: 11, d: 14, range: 2 },
-            { name: "Ursids", m: 11, d: 22, range: 1 }
-        ];
-
+        const showers = [ { name: "Quadrantids", m: 0, d: 3, range: 2 }, { name: "Lyrids", m: 3, d: 22, range: 1 }, { name: "Eta Aquariids", m: 4, d: 6, range: 2 }, { name: "Perseids", m: 7, d: 12, range: 2 }, { name: "Orionids", m: 9, d: 21, range: 2 }, { name: "Leonids", m: 10, d: 17, range: 1 }, { name: "Geminids", m: 11, d: 14, range: 2 }, { name: "Ursids", m: 11, d: 22, range: 1 } ];
         const m = date.getMonth();
         const d = date.getDate();
-
-        for (const s of showers) {
-            if (m === s.m && Math.abs(d - s.d) <= s.range) {
-                return `${s.name} (Peak)`;
-            }
-        }
+        for (const s of showers) { if (m === s.m && Math.abs(d - s.d) <= s.range) { return `${s.name} (Peak)`; } }
         return null;
     }
 }
