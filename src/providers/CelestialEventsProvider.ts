@@ -14,26 +14,23 @@ export class CelestialEventsProvider implements SparkProvider {
     async getDataForDate(targetDate: Date): Promise<ProviderResult> {
         if (!this.settings.enableCelestialEvents) return { items: [] };
 
-        const items: string[] = [];
+        const rawEvents: { timeMs: number, text: string }[] = [];
         
         const startDay = new Date(targetDate);
         startDay.setUTCHours(0,0,0,0);
         
-        // 1. LUNAR EVENTS
-        if (this.settings.showAdvancedAstronomy) {
-            const lunarEvents = this.getLunarEvents(startDay);
-            items.push(...lunarEvents);
-        } else {
-            // Even if advanced is off, we usually want Node crossings if basic astrology is on?
-            // For now, keep existing logic: Node/Eq/Perigee are under Advanced Astronomy flag.
-            const lunarEvents = this.getLunarEvents(startDay);
-            // Filter if needed, but your settings structure implies these are grouped together.
-            items.push(...lunarEvents);
-        }
+        // 1. LUNAR EVENTS (Nodes, Perigee, etc.)
+        const lunarEvents = this.getLunarEvents(startDay);
+        rawEvents.push(...lunarEvents);
 
         // 2. PLANETARY EVENTS (Conjunctions, Aspects, Stations)
         const planetEvents = this.getPlanetaryEvents(startDay);
-        items.push(...planetEvents);
+        rawEvents.push(...planetEvents);
+
+        // Sort events by time
+        rawEvents.sort((a, b) => a.timeMs - b.timeMs);
+
+        const items = rawEvents.map(e => e.text);
 
         // 3. METEOR SHOWERS
         const meteors = this.getMeteorShower(targetDate);
@@ -44,10 +41,25 @@ export class CelestialEventsProvider implements SparkProvider {
         return { items };
     }
 
+    private formatTime(date: Date): string {
+        const hours = date.getHours();
+        const minutes = date.getMinutes();
+        const mStr = minutes < 10 ? '0' + minutes : minutes;
+        
+        if (this.settings.use24HourFormat) {
+            const hStr = hours < 10 ? '0' + hours : hours;
+            return `${hStr}:${mStr}`;
+        } else {
+            const period = hours >= 12 ? 'PM' : 'AM';
+            const h12 = hours % 12 || 12;
+            return `${h12}:${mStr} ${period}`;
+        }
+    }
+
     // --- EVENT DETECTORS ---
 
-    private getLunarEvents(date: Date): string[] {
-        const events: string[] = [];
+    private getLunarEvents(date: Date): { timeMs: number, text: string }[] {
+        const events: { timeMs: number, text: string }[] = [];
         const steps = 24; 
         
         let prevPos = this.getMoonFullPos(date, 0);
@@ -58,44 +70,60 @@ export class CelestialEventsProvider implements SparkProvider {
             const t = new Date(date.getTime() + (i * 3600000));
             const currPos = this.getMoonFullPos(t, 0);
 
-            // A. NODES (Physical crossing of Ecliptic)
+            const getEventTime = (prevVal: number, currVal: number, target: number = 0) => {
+                const fraction = (target - prevVal) / (currVal - prevVal);
+                return date.getTime() + ((i - 1) * 3600000) + (fraction * 3600000);
+            };
+
+            // A. NODES (Latitude crossing 0)
+            // This IS the "Conjunction with Node"
             if (Math.sign(prevPos.lat) !== Math.sign(currPos.lat)) {
-                if (prevPos.lat < 0) events.push(`☽ **at ☊** (Ascending Node)`);
-                else events.push(`☽ **at ☋** (Descending Node)`);
+                const timeMs = getEventTime(prevPos.lat, currPos.lat, 0);
+                const timeStr = this.formatTime(new Date(timeMs));
+                if (prevPos.lat < 0) events.push({ timeMs, text: `${timeStr} ☽ **at ☊** (Ascending Node)` });
+                else events.push({ timeMs, text: `${timeStr} ☽ **at ☋** (Descending Node)` });
             }
 
             if (this.settings.showAdvancedAstronomy) {
-                // Equator
                 if (Math.sign(prevPos.dec) !== Math.sign(currPos.dec)) {
-                    events.push(`☽ **on Eq.** (Crosses Equator)`);
+                    const timeMs = getEventTime(prevPos.dec, currPos.dec, 0);
+                    const timeStr = this.formatTime(new Date(timeMs));
+                    events.push({ timeMs, text: `${timeStr} ☽ **on Eq.** (Crosses Equator)` });
                 }
-                // Apogee/Perigee
+
                 const currDistTrend = Math.sign(currPos.dist - prevPos.dist);
                 if (distTrend !== 0 && currDistTrend !== distTrend) {
-                    if (distTrend < 0) events.push(`☽ **at Perig.** (Closest)`); 
-                    else events.push(`☽ **at Apo.** (Furthest)`); 
+                    const timeMs = t.getTime(); 
+                    const timeStr = this.formatTime(t);
+                    if (distTrend < 0) events.push({ timeMs, text: `${timeStr} ☽ **at Perig.** (Closest)` });
+                    else events.push({ timeMs, text: `${timeStr} ☽ **at Apo.** (Furthest)` });
                 }
                 distTrend = currDistTrend;
-                // Runs High/Low
+
                 const currDecTrend = Math.sign(currPos.dec - prevPos.dec);
                 if (decTrend !== 0 && currDecTrend !== decTrend) {
                     if (Math.abs(currPos.dec) > 18) {
-                        if (decTrend > 0) events.push(`☽ **runs High**`);
-                        else events.push(`☽ **runs Low**`);
+                        const timeMs = t.getTime();
+                        const timeStr = this.formatTime(t);
+                        if (decTrend > 0) events.push({ timeMs, text: `${timeStr} ☽ **runs High**` });
+                        else events.push({ timeMs, text: `${timeStr} ☽ **runs Low**` });
                     }
                 }
                 decTrend = currDecTrend;
             }
+
             prevPos = currPos;
         }
-        return [...new Set(events)];
+        
+        const uniqueEvents = new Map();
+        for (const e of events) { uniqueEvents.set(e.text, e); }
+        return Array.from(uniqueEvents.values());
     }
 
-    private getPlanetaryEvents(date: Date): string[] {
-        const events: string[] = [];
-        
-        // Basic Bodies
+    private getPlanetaryEvents(date: Date): { timeMs: number, text: string }[] {
+        const events: { timeMs: number, text: string }[] = [];
         const bodies = [
+            { id: 'sun', name: 'Sun', symbol: '☉' },
             { id: 'mercury', name: 'Mercury', symbol: '☿' },
             { id: 'venus', name: 'Venus', symbol: '♀' },
             { id: 'mars', name: 'Mars', symbol: '♂' },
@@ -105,11 +133,10 @@ export class CelestialEventsProvider implements SparkProvider {
             { id: 'neptune', name: 'Neptune', symbol: '♆' }
         ];
 
-        // Deep Bodies (Pluto, Chiron, Node)
         if (this.settings.showDeepAstrology) {
             bodies.push({ id: 'pluto', name: 'Pluto', symbol: '♇' });
             bodies.push({ id: 'chiron', name: 'Chiron', symbol: '⚷' });
-            bodies.push({ id: 'node', name: 'Node', symbol: '☊' }); // North Node
+            bodies.push({ id: 'node', name: 'Node', symbol: '☊' });
         }
 
         const posStart: any = {};
@@ -120,39 +147,34 @@ export class CelestialEventsProvider implements SparkProvider {
         const prevDay = new Date(startDay.getTime() - 86400000);
         const nextDay = new Date(endDay.getTime() + 86400000);
 
-        // Calculate positions
         for (const body of bodies) {
             posStart[body.id] = this.getBodyLongitude(startDay, body.id);
             posEnd[body.id] = this.getBodyLongitude(endDay, body.id);
             
-            // CHECK STATIONS (Skip Node, it's always retro-ish)
-            if (this.settings.showRetrogrades && body.id !== 'node') {
+            if (this.settings.showRetrogrades && body.id !== 'node' && body.id !== 'sun') {
                 const lonPrev = this.getBodyLongitude(prevDay, body.id);
                 const lonCurr = posStart[body.id];
                 const lonNext = this.getBodyLongitude(nextDay, body.id);
                 
                 let v1 = lonCurr - lonPrev;
                 let v2 = lonNext - lonCurr;
-                // Normalize velocity wrapping
                 if (v1 < -180) v1 += 360; if (v1 > 180) v1 -= 360;
                 if (v2 < -180) v2 += 360; if (v2 > 180) v2 -= 360;
 
                 if (Math.sign(v1) !== Math.sign(v2) && Math.abs(v1) > 0.0001) {
-                    events.push(`${body.symbol} **stat.** (${body.name} Stationary)`);
+                    const timeMs = startDay.getTime() + (12 * 3600000);
+                    events.push({ timeMs, text: `${body.symbol} **stat.** (${body.name} Stationary)` });
                 }
             }
         }
 
-        // CHECK ASPECTS
         const moonStart = this.getMoonFullPos(startDay, 0).lon;
         const moonEnd = this.getMoonFullPos(endDay, 0).lon;
 
         // 1. Moon vs Planets
         for (const body of bodies) {
-            // Skip Moon vs Node if we already have "at ☊" from getLunarEvents?
-            // Actually, "Conjunction Node" is the astrological term for the same event.
-            // We can leave it or filter it. Leaving it gives specific time context if we were calculating times.
-            this.checkAspects(events, 'Moon', '☾', moonStart, moonEnd, body.name, body.symbol, posStart[body.id], posEnd[body.id]);
+            // FIX: Pass check for Node to avoid duplicate Conjunctions
+            this.checkAspects(events, 'Moon', '☾', moonStart, moonEnd, body.name, body.symbol, posStart[body.id], posEnd[body.id], startDay.getTime(), body.id === 'node');
         }
 
         // 2. Planet vs Planet
@@ -160,48 +182,61 @@ export class CelestialEventsProvider implements SparkProvider {
             for (let j = i + 1; j < bodies.length; j++) {
                 const b1 = bodies[i];
                 const b2 = bodies[j];
-                
-                // Optimization: Skip slow outer planets mutual aspects if desired, 
-                // but Pluto moves slow enough we should check.
-                if (b1.id === 'node' || b2.id === 'node') {
-                    // Node aspects are very common, include them only if Deep Astrology is on
-                    if (!this.settings.showDeepAstrology) continue;
-                }
+                if (b1.id === 'uranus' && b2.id === 'neptune') continue;
+                if ((b1.id === 'node' || b2.id === 'node') && !this.settings.showDeepAstrology) continue;
 
-                this.checkAspects(events, b1.name, b1.symbol, posStart[b1.id], posEnd[b1.id], b2.name, b2.symbol, posStart[b2.id], posEnd[b2.id]);
+                this.checkAspects(events, b1.name, b1.symbol, posStart[b1.id], posEnd[b1.id], b2.name, b2.symbol, posStart[b2.id], posEnd[b2.id], startDay.getTime(), false);
             }
         }
 
         return events;
     }
 
-    private checkAspects(events: string[], name1: string, sym1: string, start1: number, end1: number, name2: string, sym2: string, start2: number, end2: number) {
-        let diff1 = Math.abs(start1 - start2);
-        let diff2 = Math.abs(end1 - end2);
-        
-        if (diff1 > 180) diff1 = 360 - diff1;
-        if (diff2 > 180) diff2 = 360 - diff2;
+    private checkAspects(events: { timeMs: number, text: string }[], name1: string, sym1: string, start1: number, end1: number, name2: string, sym2: string, start2: number, end2: number, startTimeMs: number, isMoonNode: boolean) {
+        let diffStart = start1 - start2;
+        let diffEnd = end1 - end2;
 
         const checkCrossing = (targetAngle: number, symbol: string, label: string) => {
-            if ((diff1 <= targetAngle && diff2 >= targetAngle) || (diff1 >= targetAngle && diff2 <= targetAngle)) {
-                if (Math.abs(diff1 - targetAngle) < 15 && Math.abs(diff2 - targetAngle) < 15) {
-                    events.push(`${symbol} **${label}:** ${sym1} ${sym2} (${name1} & ${name2})`);
-                }
+            // Prevent duplicate Conjunction (0) or Opposition (180) for Moon-Node
+            // because 'at ☊' and 'at ☋' already cover these physical events.
+            if (isMoonNode && (targetAngle === 0 || targetAngle === 180)) return;
+
+            let d1 = diffStart - targetAngle;
+            let d2 = diffEnd - targetAngle;
+            while (d1 < -180) d1 += 360; while (d1 > 180) d1 -= 360;
+            while (d2 < -180) d2 += 360; while (d2 > 180) d2 -= 360;
+
+            if (Math.sign(d1) !== Math.sign(d2) && Math.abs(d1 - d2) < 20) {
+                const fraction = (0 - d1) / (d2 - d1);
+                const timeMs = startTimeMs + (fraction * 86400000);
+                const timeStr = this.formatTime(new Date(timeMs));
+                events.push({ timeMs, text: `${timeStr} ${symbol} **${label}:** ${sym1} ${sym2} (${name1} & ${name2})` });
+            }
+            
+            if (targetAngle !== 0 && targetAngle !== 180) {
+                 let d1_neg = diffStart - (-targetAngle);
+                 let d2_neg = diffEnd - (-targetAngle);
+                 while (d1_neg < -180) d1_neg += 360; while (d1_neg > 180) d1_neg -= 360;
+                 while (d2_neg < -180) d2_neg += 360; while (d2_neg > 180) d2_neg -= 360;
+                 
+                 if (Math.sign(d1_neg) !== Math.sign(d2_neg) && Math.abs(d1_neg - d2_neg) < 20) {
+                    const fraction = (0 - d1_neg) / (d2_neg - d1_neg);
+                    const timeMs = startTimeMs + (fraction * 86400000);
+                    const timeStr = this.formatTime(new Date(timeMs));
+                    events.push({ timeMs, text: `${timeStr} ${symbol} **${label}:** ${sym1} ${sym2} (${name1} & ${name2})` });
+                 }
             }
         };
 
-        // D. BASIC (Conjunctions & Oppositions)
         checkCrossing(0, '☌', 'Conjunction');
         checkCrossing(180, '☍', 'Opposition');
 
-        // E. ASTROLOGY (Trine, Square, Sextile)
         if (this.settings.showAstrology || this.settings.showDeepAstrology) {
             checkCrossing(120, '△', 'Trine');
             checkCrossing(90, '□', 'Square');
             checkCrossing(60, '⚹', 'Sextile');
         }
 
-        // F. DEEP ASTROLOGY (Minor Aspects)
         if (this.settings.showDeepAstrology) {
             checkCrossing(30, '⚺', 'Semi-Sextile');
             checkCrossing(45, '∠', 'Semi-Square');
@@ -211,20 +246,19 @@ export class CelestialEventsProvider implements SparkProvider {
         }
     }
 
-    // --- MATH ENGINE ---
-
+    // --- MATH ENGINE (Bodies) ---
     private getBodyLongitude(date: Date, bodyId: string): number {
         const d = (date.getTime() / 86400000) - 10957.5; 
         
-        // Special Bodies
         if (bodyId === 'node') {
-            // Mean Ascending Node (Meeus)
             let omega = 125.04452 - 0.0529535 * d;
             return (omega % 360 + 360) % 360;
         }
 
-        // Orbital Elements (J2000)
-        // Standard Planets + Pluto + Chiron (Approximate)
+        if (bodyId === 'sun') {
+             return this.getSunPosition(date).eclipticLongitude;
+        }
+
         const rad = Math.PI / 180;
         const elems: any = {
             mercury: { N: 48.3313, i: 7.0047, w: 29.1241, a: 0.387098, e: 0.205635, M: 168.6562 + 4.0923344368 * d },
@@ -235,7 +269,7 @@ export class CelestialEventsProvider implements SparkProvider {
             uranus:  { N: 74.0005, i: 0.7733, w: 96.6612, a: 19.18171, e: 0.047318, M: 142.5905 + 0.011725806 * d },
             neptune: { N: 131.7806, i: 1.7700, w: 272.8461, a: 30.05826, e: 0.008606, M: 260.2471 + 0.005995147 * d },
             pluto:   { N: 110.30347, i: 17.14175, w: 224.06676, a: 39.48168677, e: 0.24880766, M: 14.882 + 0.00396 * d },
-            chiron:  { N: 209.3, i: 6.9, w: 339.4, a: 13.67, e: 0.38, M: 339.6 + 0.019 * d } // J2000 approx
+            chiron:  { N: 209.3, i: 6.9, w: 339.4, a: 13.67, e: 0.38, M: 339.6 + 0.019 * d } 
         };
 
         const p = elems[bodyId];
@@ -271,7 +305,6 @@ export class CelestialEventsProvider implements SparkProvider {
     }
 
     private getMoonFullPos(date: Date, offsetDays: number = 0) {
-        // High Precision Meeus
         const t = new Date(date.getTime() + (offsetDays * 86400000));
         const d = (t.getTime() / 86400000) - 10957.5;
         const rad = Math.PI / 180;
@@ -308,6 +341,15 @@ export class CelestialEventsProvider implements SparkProvider {
             dist: dist,
             dec: dec
         };
+    }
+
+    private getSunPosition(date: Date) {
+        const d = (date.getTime() / 86400000) - 10957.5;
+        const rad = Math.PI / 180;
+        const M = (357.529 + 0.98560028 * d) * rad;
+        const L = (280.466 + 0.98564736 * d) * rad;
+        const l = L + 1.915 * rad * Math.sin(M) + 0.020 * rad * Math.sin(2 * M);
+        return { eclipticLongitude: l * (180 / Math.PI) };
     }
 
     private getMeteorShower(date: Date): string | null {

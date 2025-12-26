@@ -228,9 +228,8 @@ class DaySparkSettingTab extends PluginSettingTab {
                     .onClick(async () => {
                         this.plugin.settings.calendarGroups.splice(index, 1);
                         await this.plugin.saveSettings();
-                        this.display(); 
+                        this.display();
                     }));
-            topSettings.nameEl.style.fontWeight = 'bold';
 
             new Setting(div)
                 .setName('Group Name')
