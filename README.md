@@ -1,6 +1,8 @@
 # DaySpark for Obsidian 🕯️
 
-**DaySpark** is a "Digital Almanac" plugin for Obsidian that injects rich, context-aware data into your daily notes.
+**DaySpark** is a "Digital Almanac" plugin for Obsidian that injects rich, context-aware data into your daily notes.  I made this because I heard that the [Farmers' Almanac is not going to be published after 2026](https://www.farmersalmanac.com/fond-farewell-from-farmers-almanac).. so yeah. I was putting in a lot of this stuff manually in my daily journal logs, so I figured I'd dive in and make this as a full thing. 
+
+If it's not right, please feel free to put in a PR and we can get something cool.
 
 Unlike standard template plugins that just paste a date, DaySpark calculates the exact astronomical, meteorological, and calendar context for _any_ date you give it—whether it's today, a date in the future, or a journal entry from 10 years ago.
 
