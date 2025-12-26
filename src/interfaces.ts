@@ -31,7 +31,6 @@ export interface DaySparkSettings {
     // Sun Settings
     enableSun: boolean;
     sunHeader: string;
-    // Location Settings
     latitude: number;
     longitude: number;
     use24HourFormat: boolean;
@@ -57,9 +56,13 @@ export interface DaySparkSettings {
     historyHeader: string;
     historyLimit: number;
 
-    // NEW: Celestial Events Settings
-    enableCelestialEvents: boolean;
+    // Celestial Events Settings
+    enableCelestialEvents: boolean; 
     celestialHeader: string;
+    showRetrogrades: boolean;       
+    showAdvancedAstronomy: boolean; 
+    showAstrology: boolean;         // Basic: Trine, Square, Sextile
+    showDeepAstrology: boolean;     // Advanced: Quintiles, Semi-Squares, Chiron, Pluto, Node Aspects
 
     // General Behavior
     replaceContext: boolean;
@@ -96,7 +99,11 @@ export const DEFAULT_SETTINGS: DaySparkSettings = {
     historyLimit: 5,
     replaceContext: true,
     
-    // Defaults for new provider
+    // Celestial Defaults
     enableCelestialEvents: true,
-    celestialHeader: '## Celestial Events'
+    celestialHeader: '## Celestial Events',
+    showRetrogrades: true,
+    showAdvancedAstronomy: true,
+    showAstrology: false,
+    showDeepAstrology: false // Default Off to keep it simple for normal users
 };
