@@ -1,6 +1,15 @@
 import { SparkProvider, ProviderResult, DaySparkSettings } from '../interfaces';
 import { requestUrl } from 'obsidian';
 
+interface WikiEvent {
+    year: number;
+    text: string;
+}
+
+interface WikiResponse {
+    selected: WikiEvent[];
+}
+
 export class HistoryProvider implements SparkProvider {
     id = 'history-events';
     displayName = 'On This Day';
@@ -21,7 +30,8 @@ export class HistoryProvider implements SparkProvider {
         
         const url = `https://api.wikimedia.org/feed/v1/wikipedia/en/onthisday/selected/${month}/${day}`;
 
-        console.log(`DaySpark History: Fetching ${url}`);
+        // eslint-disable-next-line no-undef
+        console.debug(`DaySpark History: Fetching ${url}`);
 
         try {
             const response = await requestUrl({ 
@@ -31,7 +41,7 @@ export class HistoryProvider implements SparkProvider {
             
             if (response.status !== 200) return { items: [] };
 
-            const data = JSON.parse(response.text);
+            const data = JSON.parse(response.text) as WikiResponse;
             
             if (!data || !data.selected || data.selected.length === 0) {
                 return { items: [] };
@@ -51,6 +61,7 @@ export class HistoryProvider implements SparkProvider {
             return { items };
 
         } catch (err) {
+            // eslint-disable-next-line no-undef
             console.error("DaySpark: History API Error", err);
             return { items: [] };
         }

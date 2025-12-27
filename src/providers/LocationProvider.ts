@@ -11,20 +11,21 @@ export class LocationProvider implements SparkProvider {
         this.settings = settings;
     }
 
-    async getDataForDate(date: Date, fileContent?: string): Promise<ProviderResult> {
-        // 1. Check if "## My Location" already exists in the file
-        // If the user manually typed it, we don't want to overwrite or duplicate it.
+    async getDataForDate(_date: Date, fileContent?: string): Promise<ProviderResult> {
+        // Check if "## My Location" already exists
         if (fileContent && /## My Location/i.test(fileContent)) {
             return { items: [] }; 
         }
 
-        // 2. If missing, Auto-Calculate from Settings
         let locationName = `${this.settings.latitude.toFixed(4)}, ${this.settings.longitude.toFixed(4)}`;
         
-        // Try to get a friendly name (Reverse Geocode)
-        const friendlyName = await reverseGeocode(this.settings.latitude, this.settings.longitude);
-        if (friendlyName) {
-            locationName = friendlyName;
+        try {
+            const friendlyName = await reverseGeocode(this.settings.latitude, this.settings.longitude);
+            if (friendlyName) {
+                locationName = friendlyName;
+            }
+        } catch {
+            // Silently fail for location naming; the coordinates are the fallback
         }
         
         return {

@@ -2,6 +2,28 @@ import { SparkProvider, ProviderResult, CalendarGroup } from '../interfaces';
 import { requestUrl, Notice, App, TFile } from 'obsidian';
 import * as ICAL from 'ical.js';
 
+interface IcalTime {
+    toJSDate(): Date;
+    isDate: boolean;
+}
+
+interface IcalEvent {
+    startDate: IcalTime;
+    endDate: IcalTime;
+    summary: string;
+    description?: string;
+}
+
+interface IcalComponent {
+    getAllSubcomponents(name: string): unknown[];
+}
+
+interface IcalLibrary {
+    parse(data: string): unknown;
+    Component: new (data: unknown) => IcalComponent;
+    Event: new (data: unknown) => IcalEvent;
+}
+
 export class IcsProvider implements SparkProvider {
     id: string;
     displayName: string;
@@ -44,11 +66,13 @@ export class IcsProvider implements SparkProvider {
 
             try {
                 if (url.startsWith('http')) {
-                    console.log(`DaySpark [${this.group.name}]: Fetching Web ICS from: ${url}`);
+                    // eslint-disable-next-line no-undef
+                    console.debug(`DaySpark [${this.group.name}]: Fetching Web ICS from: ${url}`);
                     const response = await requestUrl({ url: url });
                     icsData = response.text;
                 } else {
-                    console.log(`DaySpark [${this.group.name}]: Looking for local file: ${url}`);
+                    // eslint-disable-next-line no-undef
+                    console.debug(`DaySpark [${this.group.name}]: Looking for local file: ${url}`);
                     const file = this.app.vault.getAbstractFileByPath(url);
                     
                     if (file instanceof TFile) {
@@ -58,18 +82,20 @@ export class IcsProvider implements SparkProvider {
                         if (fileWithExt instanceof TFile) {
                              icsData = await this.app.vault.read(fileWithExt);
                         } else {
+                            // eslint-disable-next-line no-undef
                             console.warn(`DaySpark: Local file not found: ${url}`);
                             continue;
                         }
                     }
                 }
 
-                const jcalData = ICAL.parse(icsData);
-                const comp = new ICAL.Component(jcalData);
+                const ical = ICAL as unknown as IcalLibrary;
+                const jcalData = ical.parse(icsData);
+                const comp = new ical.Component(jcalData);
                 const vevents = comp.getAllSubcomponents('vevent');
 
                 for (const vevent of vevents) {
-                    const event = new ICAL.Event(vevent);
+                    const event = new ical.Event(vevent);
                     const startDate = event.startDate.toJSDate();
                     const endDate = event.endDate.toJSDate();
 
@@ -113,9 +139,11 @@ export class IcsProvider implements SparkProvider {
                 }
 
             } catch (err) {
+                // eslint-disable-next-line no-undef
                 console.error(`DaySpark: Error processing ${url}`, err);
                 if (url.includes('google')) {
-                     new Notice(`DaySpark: Google Error. If private, please use a local .ics file or the Secret Address.`);
+                     // eslint-disable-next-line obsidianmd/ui/sentence-case
+                     new Notice(`DaySpark: Google error. If private, please use a local .ics file or the secret address.`);
                 }
             }
         }

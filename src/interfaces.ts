@@ -1,5 +1,3 @@
-import { Plugin } from 'obsidian';
-
 export interface ProviderResult {
     items: string[];
     rawContext?: any;

@@ -44,7 +44,7 @@ export class MoonProvider implements SparkProvider {
         const phaseInfo = this.getPhaseInfo(phaseAngle);
         
         // Illumination provides the fraction (0.0 to 1.0)
-        const illum = Illumination(Body.Moon as any, timeNoon);
+        const illum = Illumination(Body.Moon, timeNoon);
 
         const items: string[] = [
             `${phaseInfo.emoji} **Phase:** ${phaseInfo.name} (${Math.round(illum.phase_fraction * 100)}%)`
@@ -53,7 +53,7 @@ export class MoonProvider implements SparkProvider {
         // 3. Conditional: Astronomical Position
         if (this.settings.enableMoonPosition) {
             // Fetch equatorial coordinates to find the constellation correctly
-            const equator = Equator(Body.Moon as any, timeMidnight, observer, true, true);
+            const equator = Equator(Body.Moon, timeMidnight, observer, true, true);
             const constel = Constellation(equator.ra, equator.dec);
             const zodiacEmoji = this.getZodiacEmoji(constel.name);
             items.push(`**Astronomical Position:** ${zodiacEmoji} ${constel.name}`);
@@ -68,8 +68,8 @@ export class MoonProvider implements SparkProvider {
         // 5. Rise/Set (Local) - ONLY IF TOGGLE IS ENABLED
         if (this.settings.enableMoonTimes) {
             // We search from local midnight. 
-            const riseEvent = SearchRiseSet(Body.Moon as any, observer, +1, midnight, 1);
-            const setEvent = SearchRiseSet(Body.Moon as any, observer, -1, midnight, 1);
+            const riseEvent = SearchRiseSet(Body.Moon, observer, +1, midnight, 1);
+            const setEvent = SearchRiseSet(Body.Moon, observer, -1, midnight, 1);
 
             const riseDate = this.extractDate(riseEvent);
             const setDate = this.extractDate(setEvent);
@@ -103,11 +103,17 @@ export class MoonProvider implements SparkProvider {
     /**
      * Safely extracts a Date object from the various return types of astronomy-engine.
      */
-    private extractDate(event: any): Date | null {
+    private extractDate(event: unknown): Date | null {
         if (!event) return null;
         if (event instanceof Date) return event;
-        if (event.date instanceof Date) return event.date;
-        if (event.time && event.time.date instanceof Date) return event.time.date;
+        
+        const e = event as { date?: unknown; time?: { date?: unknown } };
+        
+        if (e.date instanceof Date) return e.date;
+        if (e.time && typeof e.time === 'object' && (e.time as { date?: unknown }).date instanceof Date) {
+            return (e.time as { date: Date }).date;
+        }
+        
         return null;
     }
 

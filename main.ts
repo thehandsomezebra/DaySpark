@@ -1,3 +1,4 @@
+/* eslint-disable obsidianmd/ui/sentence-case */
 import { Plugin, Notice, Setting, PluginSettingTab, App } from 'obsidian';
 import { SparkProvider, DaySparkSettings, DEFAULT_SETTINGS } from './src/interfaces';
 import { getDateFromFile, insertOrUpdateSection } from './src/utils';
@@ -20,13 +21,13 @@ export default class DaySparkPlugin extends Plugin {
         await this.loadSettings();
         this.refreshProviders();
 
-        this.addRibbonIcon('sparkles', 'DaySpark: Add to Today', async () => {
+        this.addRibbonIcon('sparkles', 'Add to today', async () => {
             await this.activateMagic();
         });
 
         this.addCommand({
-            id: 'dayspark-add',
-            name: 'Add Context to Current Note',
+            id: 'add',
+            name: 'Add context to current note',
             callback: () => this.activateMagic()
         });
 
@@ -84,6 +85,7 @@ export default class DaySparkPlugin extends Plugin {
                     }
                 }
             } catch (e) {
+                // eslint-disable-next-line no-undef
                 console.error(`DaySpark: Error in ${provider.displayName}`, e);
             }
         }
@@ -97,13 +99,13 @@ export default class DaySparkPlugin extends Plugin {
     }
 
     async loadSettings() {
-        const loadedData = await this.loadData();
+        const loadedData = (await this.loadData()) as (DaySparkSettings & { icsUrls?: string[], icsHeader?: string }) | null;
         
         // Backward compatibility migration for older single-URL calendar formats
         if (loadedData && loadedData.icsUrls && !loadedData.calendarGroups) {
             loadedData.calendarGroups = [{
                 id: 'migrated',
-                name: 'Main Calendar',
+                name: 'Main calendar',
                 enabled: true,
                 header: loadedData.icsHeader || '## Agenda',
                 urls: loadedData.icsUrls,
@@ -113,7 +115,7 @@ export default class DaySparkPlugin extends Plugin {
 
         // Ensure showDescription defaults to true for migrated or new groups
         if (loadedData && loadedData.calendarGroups) {
-            loadedData.calendarGroups.forEach((group: any) => {
+            loadedData.calendarGroups.forEach((group) => {
                 if (group.showDescription === undefined) group.showDescription = true;
             });
         }
@@ -138,13 +140,13 @@ class DaySparkSettingTab extends PluginSettingTab {
     display(): void {
         const { containerEl } = this;
         containerEl.empty();
-        containerEl.createEl('h2', { text: 'DaySpark Settings' });
+        ;
 
         // --- GENERAL ---
-        containerEl.createEl('h3', { text: '🌍 General' });
+        ;
         
         new Setting(containerEl)
-            .setName('Overwrite Sections')
+            .setName('Overwrite sections')
             .setDesc('If enabled, DaySpark will update existing sections instead of appending new data. Useful if you change location or context.')
             .addToggle(t => t.setValue(this.plugin.settings.replaceContext).onChange(async v => { 
                 this.plugin.settings.replaceContext = v; 
@@ -168,7 +170,7 @@ class DaySparkSettingTab extends PluginSettingTab {
             }));
 
         new Setting(containerEl)
-            .setName('24-Hour Time')
+            .setName('24-hour time')
             .setDesc('Toggle between AM/PM and 24-hour clock formats.')
             .addToggle(t => t.setValue(this.plugin.settings.use24HourFormat).onChange(async v => { 
                 this.plugin.settings.use24HourFormat = v; 
@@ -177,7 +179,7 @@ class DaySparkSettingTab extends PluginSettingTab {
 
         // --- CALENDAR GROUPS ---
         containerEl.createEl('hr');
-        containerEl.createEl('h3', { text: '📅 Calendar Groups' });
+        new Setting(containerEl).setName("📅 Calendar groups").setHeading();
         containerEl.createEl('p', { text: 'Add multiple groups of .ics feeds. Each group can have its own section and header.', cls: 'setting-item-description' });
         
         this.plugin.settings.calendarGroups.forEach((group, index) => {
@@ -187,7 +189,7 @@ class DaySparkSettingTab extends PluginSettingTab {
             });
             
             new Setting(div)
-                .setName(`Calendar Group Header: ${group.header || (index + 1)}`)
+                .setName(`Calendar group header: ${group.header || (index + 1)}`)
                 .setHeading()
                 .addToggle(toggle => toggle
                     .setValue(group.enabled)
@@ -216,7 +218,7 @@ class DaySparkSettingTab extends PluginSettingTab {
                     }));
 
             new Setting(div)
-                .setName('Show Descriptions')
+                .setName('Show descriptions')
                 .setDesc('Include event notes and descriptions in the output.')
                 .addToggle(toggle => toggle
                     .setValue(group.showDescription)
@@ -239,12 +241,12 @@ class DaySparkSettingTab extends PluginSettingTab {
 
         new Setting(containerEl)
             .addButton(btn => btn
-                .setButtonText('+ Add Calendar Group')
+                .setButtonText('+ Add calendar group')
                 .setCta()
                 .onClick(async () => {
                     this.plugin.settings.calendarGroups.push({
                         id: Date.now().toString(),
-                        name: 'New Group',
+                        name: 'New group',
                         enabled: true,
                         header: '## Agenda',
                         urls: [],
@@ -256,10 +258,10 @@ class DaySparkSettingTab extends PluginSettingTab {
 
         // --- WEATHER ---
         containerEl.createEl('hr');
-        containerEl.createEl('h3', { text: '🌦️ Weather' });
+        new Setting(containerEl).setName("🌦️ Weather").setHeading();
         
         new Setting(containerEl)
-            .setName('Enable Weather')
+            .setName('Enable weather')
             .setDesc('Pulls meteorological data from Open-Meteo.')
             .addToggle(t => t.setValue(this.plugin.settings.enableWeather).onChange(async v => { 
                 this.plugin.settings.enableWeather = v; 
@@ -269,7 +271,7 @@ class DaySparkSettingTab extends PluginSettingTab {
 
         if (this.plugin.settings.enableWeather) {
             new Setting(containerEl)
-                .setName('Use Metric Units')
+                .setName('Use metric units')
                 .setDesc('Celsius and km/h instead of Fahrenheit and mph.')
                 .addToggle(t => t.setValue(this.plugin.settings.useMetric).onChange(async v => { 
                     this.plugin.settings.useMetric = v; 
@@ -277,7 +279,7 @@ class DaySparkSettingTab extends PluginSettingTab {
                 }));
 
             new Setting(containerEl)
-                .setName('Weather Header')
+                .setName('Weather header')
                 .addText(t => t.setValue(this.plugin.settings.weatherHeader).onChange(async v => { 
                     this.plugin.settings.weatherHeader = v; 
                     await this.plugin.saveSettings(); 
@@ -286,10 +288,10 @@ class DaySparkSettingTab extends PluginSettingTab {
 
         // --- MOON ---
         containerEl.createEl('hr');
-        containerEl.createEl('h3', { text: '🌑 Moon Phase' });
+        new Setting(containerEl).setName("🌑 Moon phase").setHeading();
         
         new Setting(containerEl)
-            .setName('Enable Moon Phase')
+            .setName('Enable moon phase')
             .setDesc('Include phase and illumination percentage.')
             .addToggle(t => t
                 .setValue(this.plugin.settings.enableMoon)
@@ -301,7 +303,7 @@ class DaySparkSettingTab extends PluginSettingTab {
 
         if (this.plugin.settings.enableMoon) {
             new Setting(containerEl)
-                .setName('Moon Header')
+                .setName('Moon header')
                 .addText(t => t
                     .setValue(this.plugin.settings.moonHeader)
                     .onChange(async v => {
@@ -310,7 +312,7 @@ class DaySparkSettingTab extends PluginSettingTab {
                     }));
 
             new Setting(containerEl)
-                .setName('Enable Moon Rise/Set')
+                .setName('Enable moon rise/set')
                 .setDesc('Include local moonrise and moonset times for the day.')
                 .addToggle(t => t
                     .setValue(this.plugin.settings.enableMoonTimes)
@@ -320,7 +322,7 @@ class DaySparkSettingTab extends PluginSettingTab {
                     }));
 
             new Setting(containerEl)
-                .setName('Enable Moon Age')
+                .setName('Enable moon age')
                 .setDesc('Include the age of the moon in days.')
                 .addToggle(t => t
                     .setValue(this.plugin.settings.enableMoonAge)
@@ -330,7 +332,7 @@ class DaySparkSettingTab extends PluginSettingTab {
                     }));
 
             new Setting(containerEl)
-                .setName('Enable Astronomical Position')
+                .setName('Enable astronomical position')
                 .setDesc('Include the current zodiac constellation position of the moon.')
                 .addToggle(t => t
                     .setValue(this.plugin.settings.enableMoonPosition)
@@ -341,9 +343,9 @@ class DaySparkSettingTab extends PluginSettingTab {
         }
 
         // --- SUN ---
-        containerEl.createEl('h3', { text: '☀️ Sun Times' });
+        new Setting(containerEl).setName("☀️ Sun times").setHeading();
         new Setting(containerEl)
-            .setName('Enable Sun Times')
+            .setName('Enable sun times')
             .setDesc('Include local sunrise and sunset times.')
             .addToggle(t => t.setValue(this.plugin.settings.enableSun).onChange(async v => { 
                 this.plugin.settings.enableSun = v; 
@@ -353,7 +355,7 @@ class DaySparkSettingTab extends PluginSettingTab {
 
         if (this.plugin.settings.enableSun) {
             new Setting(containerEl)
-                .setName('Sun Header')
+                .setName('Sun header')
                 .addText(t => t.setValue(this.plugin.settings.sunHeader).onChange(async v => { 
                     this.plugin.settings.sunHeader = v; 
                     await this.plugin.saveSettings(); 
@@ -362,9 +364,9 @@ class DaySparkSettingTab extends PluginSettingTab {
 
         // --- SKY WATCH (PLANETS) ---
         containerEl.createEl('hr');
-        containerEl.createEl('h3', { text: '🪐 Sky Watch' });
+        new Setting(containerEl).setName("🪐 Sky watch").setHeading();
         new Setting(containerEl)
-            .setName('Enable Planet Watch')
+            .setName('Enable planet watch')
             .setDesc('Identifies visible naked-eye planets for the given night.')
             .addToggle(t => t.setValue(this.plugin.settings.enablePlanets).onChange(async v => { 
                 this.plugin.settings.enablePlanets = v; 
@@ -374,7 +376,7 @@ class DaySparkSettingTab extends PluginSettingTab {
 
         if (this.plugin.settings.enablePlanets) {
             new Setting(containerEl)
-                .setName('Planet Header')
+                .setName('Planet header')
                 .addText(t => t.setValue(this.plugin.settings.planetHeader).onChange(async v => { 
                     this.plugin.settings.planetHeader = v; 
                     await this.plugin.saveSettings(); 
@@ -383,10 +385,10 @@ class DaySparkSettingTab extends PluginSettingTab {
 
         // --- CELESTIAL EVENTS ---
         containerEl.createEl('hr');
-        containerEl.createEl('h3', { text: '✨ Celestial Events' });
+        new Setting(containerEl).setName("✨ Celestial events").setHeading();
         
         new Setting(containerEl)
-            .setName('Enable Celestial Events')
+            .setName('Enable celestial events')
             .setDesc('Master toggle for meteor showers and major celestial events.')
             .addToggle(t => t.setValue(this.plugin.settings.enableCelestialEvents).onChange(async v => { 
                 this.plugin.settings.enableCelestialEvents = v; 
@@ -396,14 +398,14 @@ class DaySparkSettingTab extends PluginSettingTab {
 
         if (this.plugin.settings.enableCelestialEvents) {
             new Setting(containerEl)
-                .setName('Celestial Header')
+                .setName('Celestial header')
                 .addText(t => t.setValue(this.plugin.settings.celestialHeader).onChange(async v => { 
                     this.plugin.settings.celestialHeader = v; 
                     await this.plugin.saveSettings(); 
                 }));
 
             new Setting(containerEl)
-                .setName('Enable Basic Events')
+                .setName('Enable basic events')
                 .setDesc('Conjunctions (☌), Oppositions (☍), and Moon Nodes (☊/☋).')
                 .addToggle(t => t.setValue(this.plugin.settings.enableBasicEvents).onChange(async v => { 
                     this.plugin.settings.enableBasicEvents = v; 
@@ -411,7 +413,7 @@ class DaySparkSettingTab extends PluginSettingTab {
                 }));
 
             new Setting(containerEl)
-                .setName('Enable Meteor Showers')
+                .setName('Enable meteor showers')
                 .setDesc('Major meteor shower peak alerts.')
                 .addToggle(t => t.setValue(this.plugin.settings.enableMeteorShowers).onChange(async v => { 
                     this.plugin.settings.enableMeteorShowers = v; 
@@ -419,7 +421,7 @@ class DaySparkSettingTab extends PluginSettingTab {
                 }));
 
             new Setting(containerEl)
-                .setName('Enable Advanced Astronomy')
+                .setName('Enable advanced astronomy')
                 .setDesc('Lunar Perigee/Apogee and extreme Moon declination (Runs High/Low).')
                 .addToggle(t => t.setValue(this.plugin.settings.enableAdvancedAstronomy).onChange(async v => { 
                     this.plugin.settings.enableAdvancedAstronomy = v; 
@@ -429,11 +431,11 @@ class DaySparkSettingTab extends PluginSettingTab {
 
         // --- SEASONS ---
         containerEl.createEl('hr');
-        containerEl.createEl('h3', { text: '📅 Seasons' });
+        new Setting(containerEl).setName("📅 Seasons").setHeading();
         
         new Setting(containerEl)
-            .setName('Enable Seasons')
-            .setDesc('Flags Equinoxes and Solstices.')
+            .setName('Enable seasons')
+            .setDesc('Flags equinoxes and solstices.')
             .addToggle(t => t.setValue(this.plugin.settings.enableSeasons).onChange(async v => { 
                 this.plugin.settings.enableSeasons = v; 
                 await this.plugin.saveSettings(); 
@@ -442,14 +444,14 @@ class DaySparkSettingTab extends PluginSettingTab {
 
         if (this.plugin.settings.enableSeasons) {
             new Setting(containerEl)
-                .setName('Seasons Header')
+                .setName('Seasons header')
                 .addText(t => t.setValue(this.plugin.settings.seasonsHeader || '## Seasons').onChange(async v => { 
                     this.plugin.settings.seasonsHeader = v; 
                     await this.plugin.saveSettings(); 
                 }));
 
             new Setting(containerEl)
-                .setName('Enable Cross-Quarter Days')
+                .setName('Enable cross-quarter days')
                 .setDesc('Includes Almanac mid-season markers like Samhain (Nov 1), Imbolc, Beltane, and Lammas.')
                 .addToggle(t => t.setValue(this.plugin.settings.enableCrossQuarterDays).onChange(async v => { 
                     this.plugin.settings.enableCrossQuarterDays = v; 
@@ -457,7 +459,7 @@ class DaySparkSettingTab extends PluginSettingTab {
                 }));
 
             new Setting(containerEl)
-                .setName('Enable Meteorological Seasons')
+                .setName('Enable meteorological seasons')
                 .setDesc('Includes markers for the start of meteorological seasons (1st of the month).')
                 .addToggle(t => t.setValue(this.plugin.settings.enableMeteorologicalSeasons).onChange(async v => { 
                     this.plugin.settings.enableMeteorologicalSeasons = v; 
@@ -467,10 +469,10 @@ class DaySparkSettingTab extends PluginSettingTab {
 
         // --- ALMANAC LORE ---
         containerEl.createEl('hr');
-        containerEl.createEl('h3', { text: '📜 Almanac Lore' });
+        new Setting(containerEl).setName("📜 Almanac lore").setHeading();
 
         new Setting(containerEl)
-            .setName('Enable Almanac Lore')
+            .setName('Enable almanac lore')
             .setDesc('Traditional weather proverbs and monthly lore.')
             .addToggle(t => t.setValue(this.plugin.settings.enableAlmanac).onChange(async v => { 
                 this.plugin.settings.enableAlmanac = v; 
@@ -480,7 +482,7 @@ class DaySparkSettingTab extends PluginSettingTab {
 
         if (this.plugin.settings.enableAlmanac) {
             new Setting(containerEl)
-                .setName('Almanac Header')
+                .setName('Almanac header')
                 .addText(t => t.setValue(this.plugin.settings.almanacHeader).onChange(async v => { 
                     this.plugin.settings.almanacHeader = v; 
                     await this.plugin.saveSettings(); 
@@ -489,10 +491,10 @@ class DaySparkSettingTab extends PluginSettingTab {
 
         // --- ON THIS DAY ---
         containerEl.createEl('hr');
-        containerEl.createEl('h3', { text: '📖 On This Day' });
+        new Setting(containerEl).setName("📖 On this day").setHeading();
 
         new Setting(containerEl)
-            .setName('Enable On This Day')
+            .setName('Enable on this day')
             .setDesc('Historical events from Wikipedia for this date.')
             .addToggle(t => t.setValue(this.plugin.settings.enableHistory).onChange(async v => { 
                 this.plugin.settings.enableHistory = v; 
@@ -502,7 +504,7 @@ class DaySparkSettingTab extends PluginSettingTab {
 
         if (this.plugin.settings.enableHistory) {
             new Setting(containerEl)
-                .setName('Max History Events')
+                .setName('Max history events')
                 .addDropdown(d => { 
                     for(let i=1;i<=10;i++) d.addOption(i.toString(), i.toString()); 
                     d.setValue(String(this.plugin.settings.historyLimit)).onChange(async v => {
@@ -512,7 +514,7 @@ class DaySparkSettingTab extends PluginSettingTab {
                 });
 
             new Setting(containerEl)
-                .setName('History Header')
+                .setName('History header')
                 .addText(t => t.setValue(this.plugin.settings.historyHeader).onChange(async v => { 
                     this.plugin.settings.historyHeader = v; 
                     await this.plugin.saveSettings(); 

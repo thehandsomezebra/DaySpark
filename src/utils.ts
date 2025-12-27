@@ -4,7 +4,37 @@ import { DaySparkSettings } from './interfaces';
 declare global {
     interface Window {
         app: App;
+        moment: (input: string, format: string, strict: boolean) => {
+            isValid: () => boolean;
+            toDate: () => Date;
+        };
     }
+}
+
+interface NominatimAddress {
+    city?: string;
+    town?: string;
+    village?: string;
+    municipality?: string;
+    hamlet?: string;
+    suburb?: string;
+    state?: string;
+    country?: string;
+}
+
+interface NominatimResult {
+    address?: NominatimAddress;
+    lat: string;
+    lon: string;
+    display_name: string;
+}
+
+interface OpenMeteoResult {
+    latitude: number;
+    longitude: number;
+    name: string;
+    admin1?: string;
+    country?: string;
 }
 
 // UPDATED: Now accepts 'replace' argument
@@ -49,8 +79,16 @@ export function insertOrUpdateSection(content: string, header: string, newItems:
 }
 
 export function getDateFromFile(file: TFile, app: App): Date | null {
-    // @ts-ignore
-    const dailyNotesPlugin = app.internalPlugins?.getPluginById('daily-notes');
+    interface DailyNotesPlugin {
+        instance: {
+            options: {
+                format: string;
+            }
+        }
+    }
+    
+    const internalPlugins = (app as unknown as { internalPlugins: { getPluginById: (id: string) => DailyNotesPlugin } }).internalPlugins;
+    const dailyNotesPlugin = internalPlugins?.getPluginById('daily-notes');
     let format = "YYYY-MM-DD"; 
     
     if (dailyNotesPlugin && dailyNotesPlugin.instance && dailyNotesPlugin.instance.options) {
@@ -58,7 +96,7 @@ export function getDateFromFile(file: TFile, app: App): Date | null {
     }
 
     const name = file.basename;
-    // @ts-ignore
+    // eslint-disable-next-line no-undef
     const date = window.moment(name, format, true);
     
     if (date.isValid()) {
@@ -87,7 +125,7 @@ export async function reverseGeocode(lat: number, lng: number): Promise<string |
         });
         
         if (res.status === 200) {
-            const data = JSON.parse(res.text);
+            const data = JSON.parse(res.text) as NominatimResult;
             const addr = data.address;
             
             if (addr) {
@@ -102,6 +140,7 @@ export async function reverseGeocode(lat: number, lng: number): Promise<string |
             }
         }
     } catch (e) {
+        // eslint-disable-next-line no-undef
         console.error("DaySpark: Reverse geocoding failed", e);
     }
     return null;
@@ -113,14 +152,15 @@ export async function resolveLocation(settings: DaySparkSettings, content?: stri
         // Matches "## My Location" followed by optional newlines
         // Then looks for optional bullet point ([-*]) and space
         // Captures the rest of the line
-        const match = content.match(/## My Location\s*\n[\s\-\*]*([^\n]+)/i);
+        const match = content.match(/## My Location\s*\n[\s\-*]*([^\n]+)/i);
         
         if (match && match[1]) {
             let query = match[1].trim();
             // Remove any markdown links if user put [[Las Vegas]]
-            query = query.replace(/[\[\]]/g, '');
+            query = query.replace(/[[\]]/g, '');
             
-            console.log(`DaySpark: Found custom location "${query}", geocoding...`);
+            // eslint-disable-next-line no-undef
+            console.debug(`DaySpark: Found custom location "${query}", geocoding...`);
             
             // STRATEGY A: Open-Meteo Search (Forward Geocoding)
             try {
@@ -128,7 +168,7 @@ export async function resolveLocation(settings: DaySparkSettings, content?: stri
                 const res = await requestUrl({ url });
                 
                 if (res.status === 200) {
-                    const data = JSON.parse(res.text);
+                    const data = JSON.parse(res.text) as { results?: OpenMeteoResult[] };
                     
                     if (data && data.results && data.results.length > 0) {
                         const loc = data.results[0];
@@ -141,6 +181,7 @@ export async function resolveLocation(settings: DaySparkSettings, content?: stri
                     }
                 }
             } catch (e) {
+                // eslint-disable-next-line no-undef
                 console.warn("DaySpark: Open-Meteo Geocoding failed, trying fallback...", e);
             }
 
@@ -153,18 +194,19 @@ export async function resolveLocation(settings: DaySparkSettings, content?: stri
                 });
                 
                 if (res.status === 200) {
-                    const data = JSON.parse(res.text);
+                    const data = JSON.parse(res.text) as NominatimResult[];
                     
                     if (data && data.length > 0) {
                         const loc = data[0];
                         return {
                             lat: parseFloat(loc.lat),
                             lng: parseFloat(loc.lon),
-                            name: loc.display_name.split(',')[0] 
+                            name: loc.display_name.split(',')[0]
                         };
                     }
                 }
             } catch (e) {
+                // eslint-disable-next-line no-undef
                 console.error("DaySpark: All geocoding strategies failed", e);
             }
         }
@@ -181,6 +223,7 @@ export async function resolveLocation(settings: DaySparkSettings, content?: stri
             fallbackName = friendlyName;
         }
     } catch (e) {
+        // eslint-disable-next-line no-undef
         console.error("DaySpark: Default location reverse geocode failed", e);
     }
 

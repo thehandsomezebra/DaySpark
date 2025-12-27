@@ -1,5 +1,17 @@
 import { SparkProvider, ProviderResult, DaySparkSettings } from '../interfaces';
 
+interface PlanetPosition {
+    ra: number;
+}
+
+interface OrbitalElements {
+    L: number;
+    v: number;
+    e: number;
+    M: number;
+    a: number;
+}
+
 /**
  * MANUAL ASTRONOMY PROVIDER (Farmer's Almanac Edition)
  * This provider uses manual orbital mechanics to calculate geocentric positions.
@@ -33,7 +45,7 @@ export class CelestialEventsProvider implements SparkProvider {
 
         // Initial state
         let prevMoon = this.getMoonPosition(dayStart);
-        let prevPlanets = new Map<string, any>();
+        let prevPlanets = new Map<string, PlanetPosition>();
         planets.forEach(p => prevPlanets.set(p, this.getGeocentricPlanetPosition(p, dayStart)));
 
         // 1. High-Resolution Scanner
@@ -41,7 +53,7 @@ export class CelestialEventsProvider implements SparkProvider {
             for (let i = 1; i <= steps; i++) {
                 const currentTime = new Date(dayStart.getTime() + i * stepSize);
                 const currMoon = this.getMoonPosition(currentTime);
-                const currPlanets = new Map<string, any>();
+                const currPlanets = new Map<string, PlanetPosition>();
                 planets.forEach(p => currPlanets.set(p, this.getGeocentricPlanetPosition(p, currentTime)));
 
                 // --- A. CONJUNCTIONS (Geocentric Right Ascension) ---
@@ -163,7 +175,7 @@ export class CelestialEventsProvider implements SparkProvider {
         return { ra, dec, lat, dist };
     }
 
-    private getGeocentricPlanetPosition(name: string, date: Date) {
+    private getGeocentricPlanetPosition(name: string, date: Date): PlanetPosition {
         const d = this.getJulianDate(date) - 2451545.0;
 
         const sunL = this.rev(280.466 + 0.985647 * d);
@@ -171,7 +183,7 @@ export class CelestialEventsProvider implements SparkProvider {
         const sunR = 1.00014 - 0.01671 * Math.cos(this.rad(sunM));
         const sunLon = this.rev(sunL + 1.915 * Math.sin(this.rad(sunM)));
 
-        const elements: any = {
+        const elements: Record<string, OrbitalElements> = {
             'Mercury': { L: 252.25, v: 4.09233, e: 0.2056, M: 174.79, a: 0.3871 },
             'Venus':   { L: 181.98, v: 1.60213, e: 0.0067, M: 50.40,  a: 0.7233 },
             'Mars':    { L: 355.45, v: 0.52402, e: 0.0934, M: 19.38,  a: 1.5237 },
@@ -217,7 +229,7 @@ export class CelestialEventsProvider implements SparkProvider {
     }
 
     private getPlanetSymbol(name: string): string {
-        const symbols: any = {
+        const symbols: Record<string, string> = {
             'Mercury': '☿', 'Venus': '♀', 'Mars': '♂', 
             'Jupiter': '♃', 'Saturn': '♄', 'Uranus': '⛢', 'Neptune': '♆',
             'Pluto': '♇'

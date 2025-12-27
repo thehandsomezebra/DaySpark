@@ -2,6 +2,17 @@ import { SparkProvider, ProviderResult, DaySparkSettings } from '../interfaces';
 import { requestUrl } from 'obsidian';
 import { resolveLocation } from '../utils';
 
+interface OpenMeteoResponse {
+    daily: {
+        time: string[];
+        temperature_2m_max: number[];
+        temperature_2m_min: number[];
+        weather_code: number[];
+        wind_speed_10m_max: number[];
+        wind_direction_10m_dominant: number[];
+    };
+}
+
 export class WeatherProvider implements SparkProvider {
     id = 'weather-context';
     displayName = 'Weather';
@@ -37,11 +48,12 @@ export class WeatherProvider implements SparkProvider {
             url = `https://api.open-meteo.com/v1/forecast?latitude=${location.lat}&longitude=${location.lng}&start_date=${dateStr}&end_date=${dateStr}&daily=weather_code,temperature_2m_max,temperature_2m_min,wind_speed_10m_max,wind_direction_10m_dominant&temperature_unit=${unitTemp}&wind_speed_unit=${unitWind}&timezone=auto`;
         }
 
-        console.log(`DaySpark Weather: Fetching for ${location.name}`, url);
+        // eslint-disable-next-line no-undef
+        console.debug(`DaySpark Weather: Fetching for ${location.name}`, url);
 
         try {
             const response = await requestUrl({ url: url });
-            const data = response.json;
+            const data = response.json as OpenMeteoResponse;
 
             if (!data || !data.daily || !data.daily.time || data.daily.time.length === 0) {
                 return { items: [] };
@@ -68,6 +80,7 @@ export class WeatherProvider implements SparkProvider {
             };
 
         } catch (err) {
+            // eslint-disable-next-line no-undef
             console.error("DaySpark: Weather API Error", err);
             return { items: [] };
         }

@@ -1,6 +1,15 @@
 import { SparkProvider, ProviderResult, DaySparkSettings } from '../interfaces';
 import { resolveLocation } from '../utils';
 
+interface OrbitalElements {
+    N: number;
+    i: number;
+    w: number;
+    a: number;
+    e: number;
+    M: number;
+}
+
 export class PlanetProvider implements SparkProvider {
     id = 'planet-watch';
     displayName = 'Sky Watch';
@@ -106,7 +115,7 @@ export class PlanetProvider implements SparkProvider {
     private getPlanetPosition(date: Date, planet: string) {
         const d = (date.getTime() / 86400000) - 10957.5; 
         const rad = Math.PI / 180;
-        const elems: any = {
+        const elems: Record<string, OrbitalElements> = {
             mercury: { N: 48.3313, i: 7.0047, w: 29.1241, a: 0.387098, e: 0.205635, M: 168.6562 + 4.0923344368 * d },
             venus:   { N: 76.6799, i: 3.3946, w: 54.8910, a: 0.723330, e: 0.006773, M: 48.0052 + 1.6021302244 * d },
             mars:    { N: 49.5574, i: 1.8497, w: 286.5016, a: 1.523688, e: 0.093405, M: 18.6021 + 0.5240207766 * d },
