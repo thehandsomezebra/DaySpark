@@ -1,7 +1,7 @@
 {
 	"id": "dayspark",
 	"name": "DaySpark",
-	"version": "1.1.0",
+	"version": "1.2.0",
 	"minAppVersion": "0.15.0",
 	"description": "A digital almanac for daily notes. Injects ICS calendars, sun/moon phases, celestial conjunctions, meteor showers, weather, and historical context.",
 	"author": "Stephanie Frantz",
