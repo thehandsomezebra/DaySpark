@@ -30,8 +30,8 @@ export class CelestialEventsProvider implements SparkProvider {
         if (this.settings.celestialHeader) this.targetHeader = this.settings.celestialHeader;
     }
 
-    async getDataForDate(targetDate: Date, fileContent?: string): Promise<ProviderResult> {
-        if (!this.settings.enableCelestialEvents) return { items: [] };
+    getDataForDate(targetDate: Date, fileContent?: string): Promise<ProviderResult> {
+        if (!this.settings.enableCelestialEvents) return Promise.resolve({ items: [] });
 
         const rawEvents: { time: Date, text: string }[] = [];
         const dayStart = new Date(targetDate);
@@ -129,7 +129,7 @@ export class CelestialEventsProvider implements SparkProvider {
         rawEvents.sort((a, b) => a.time.getTime() - b.time.getTime());
         const uniqueItems = [...new Set(rawEvents.map(e => e.text))];
 
-        return { items: uniqueItems };
+        return Promise.resolve({ items: uniqueItems });
     }
 
     private getJulianDate(date: Date): number {

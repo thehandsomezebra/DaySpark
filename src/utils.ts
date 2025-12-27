@@ -96,7 +96,6 @@ export function getDateFromFile(file: TFile, app: App): Date | null {
     }
 
     const name = file.basename;
-    // eslint-disable-next-line no-undef
     const date = window.moment(name, format, true);
     
     if (date.isValid()) {
@@ -140,7 +139,6 @@ export async function reverseGeocode(lat: number, lng: number): Promise<string |
             }
         }
     } catch (e) {
-        // eslint-disable-next-line no-undef
         console.error("DaySpark: Reverse geocoding failed", e);
     }
     return null;
@@ -159,7 +157,6 @@ export async function resolveLocation(settings: DaySparkSettings, content?: stri
             // Remove any markdown links if user put [[Las Vegas]]
             query = query.replace(/[[\]]/g, '');
             
-            // eslint-disable-next-line no-undef
             console.debug(`DaySpark: Found custom location "${query}", geocoding...`);
             
             // STRATEGY A: Open-Meteo Search (Forward Geocoding)
@@ -181,7 +178,6 @@ export async function resolveLocation(settings: DaySparkSettings, content?: stri
                     }
                 }
             } catch (e) {
-                // eslint-disable-next-line no-undef
                 console.warn("DaySpark: Open-Meteo Geocoding failed, trying fallback...", e);
             }
 
@@ -206,7 +202,6 @@ export async function resolveLocation(settings: DaySparkSettings, content?: stri
                     }
                 }
             } catch (e) {
-                // eslint-disable-next-line no-undef
                 console.error("DaySpark: All geocoding strategies failed", e);
             }
         }
@@ -223,7 +218,6 @@ export async function resolveLocation(settings: DaySparkSettings, content?: stri
             fallbackName = friendlyName;
         }
     } catch (e) {
-        // eslint-disable-next-line no-undef
         console.error("DaySpark: Default location reverse geocode failed", e);
     }
 

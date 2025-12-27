@@ -30,7 +30,6 @@ export class HistoryProvider implements SparkProvider {
         
         const url = `https://api.wikimedia.org/feed/v1/wikipedia/en/onthisday/selected/${month}/${day}`;
 
-        // eslint-disable-next-line no-undef
         console.debug(`DaySpark History: Fetching ${url}`);
 
         try {
@@ -61,7 +60,6 @@ export class HistoryProvider implements SparkProvider {
             return { items };
 
         } catch (err) {
-            // eslint-disable-next-line no-undef
             console.error("DaySpark: History API Error", err);
             return { items: [] };
         }

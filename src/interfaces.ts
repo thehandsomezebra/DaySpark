@@ -1,6 +1,6 @@
 export interface ProviderResult {
     items: string[];
-    rawContext?: any;
+    rawContext?: unknown;
 }
 
 export interface SparkProvider {

@@ -11,8 +11,8 @@ export class SeasonProvider implements SparkProvider {
         if (this.settings.seasonsHeader) this.targetHeader = this.settings.seasonsHeader;
     }
 
-    async getDataForDate(targetDate: Date): Promise<ProviderResult> {
-        if (!this.settings.enableSeasons) return { items: [] };
+    getDataForDate(targetDate: Date): Promise<ProviderResult> {
+        if (!this.settings.enableSeasons) return Promise.resolve({ items: [] });
 
         const month = targetDate.getMonth(); // 0-indexed
         const day = targetDate.getDate();
@@ -40,6 +40,6 @@ export class SeasonProvider implements SparkProvider {
             if (month === 11) items.push("❄️ **Meteorological Winter begins**");
         }
 
-        return { items };
+        return Promise.resolve({ items });
     }
 }

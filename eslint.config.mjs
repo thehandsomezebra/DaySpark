@@ -22,12 +22,28 @@ export default tseslint.config(
 				project: "./tsconfig.json",
 				tsconfigRootDir: import.meta.dirname,
 			},
+			globals: {
+				console: "readonly",
+				window: "readonly",
+				document: "readonly",
+				setTimeout: "readonly",
+				clearTimeout: "readonly"
+			},
 		},
 		rules: {
 			// Obsidian reviewers prefer explicit notices/modals over console spam
 			"no-console": "warn",
-			// This rule sometimes flags Obsidian's internal APIs incorrectly
-			"@typescript-eslint/no-explicit-any": "off",
+			// Match Obsidian Bot: Catch unused async and explicit any
+			"@typescript-eslint/no-explicit-any": "error",
+			"@typescript-eslint/require-await": "error",
+			"obsidianmd/ui/sentence-case": [
+				"error",
+				{
+					brands: ["DaySpark", "Open-Meteo", "Google", "Wikipedia", "iCal"],
+					acronyms: ["ICS", "URL", "URLs", "AM", "PM"],
+					allowAutoFix: true,
+				},
+			],
 		},
 	}
 );

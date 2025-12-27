@@ -66,12 +66,10 @@ export class IcsProvider implements SparkProvider {
 
             try {
                 if (url.startsWith('http')) {
-                    // eslint-disable-next-line no-undef
                     console.debug(`DaySpark [${this.group.name}]: Fetching Web ICS from: ${url}`);
                     const response = await requestUrl({ url: url });
                     icsData = response.text;
                 } else {
-                    // eslint-disable-next-line no-undef
                     console.debug(`DaySpark [${this.group.name}]: Looking for local file: ${url}`);
                     const file = this.app.vault.getAbstractFileByPath(url);
                     
@@ -82,7 +80,6 @@ export class IcsProvider implements SparkProvider {
                         if (fileWithExt instanceof TFile) {
                              icsData = await this.app.vault.read(fileWithExt);
                         } else {
-                            // eslint-disable-next-line no-undef
                             console.warn(`DaySpark: Local file not found: ${url}`);
                             continue;
                         }
@@ -139,11 +136,9 @@ export class IcsProvider implements SparkProvider {
                 }
 
             } catch (err) {
-                // eslint-disable-next-line no-undef
                 console.error(`DaySpark: Error processing ${url}`, err);
                 if (url.includes('google')) {
-                     // eslint-disable-next-line obsidianmd/ui/sentence-case
-                     new Notice(`DaySpark: Google error. If private, please use a local .ics file or the secret address.`);
+                     new Notice("DaySpark: Google error. If private, please use a local .ICS file or the secret address.");
                 }
             }
         }

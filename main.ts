@@ -1,4 +1,3 @@
-/* eslint-disable obsidianmd/ui/sentence-case */
 import { Plugin, Notice, Setting, PluginSettingTab, App } from 'obsidian';
 import { SparkProvider, DaySparkSettings, DEFAULT_SETTINGS } from './src/interfaces';
 import { getDateFromFile, insertOrUpdateSection } from './src/utils';
@@ -85,7 +84,6 @@ export default class DaySparkPlugin extends Plugin {
                     }
                 }
             } catch (e) {
-                // eslint-disable-next-line no-undef
                 console.error(`DaySpark: Error in ${provider.displayName}`, e);
             }
         }
@@ -94,7 +92,7 @@ export default class DaySparkPlugin extends Plugin {
             await this.app.vault.modify(activeFile, currentContent);
             new Notice("DaySpark updated your note!");
         } else {
-            new Notice("DaySpark: No new items found to add.");
+            new Notice("DaySpark: no new items found to add.");
         }
     }
 
@@ -179,8 +177,8 @@ class DaySparkSettingTab extends PluginSettingTab {
 
         // --- CALENDAR GROUPS ---
         containerEl.createEl('hr');
-        new Setting(containerEl).setName("📅 Calendar groups").setHeading();
-        containerEl.createEl('p', { text: 'Add multiple groups of .ics feeds. Each group can have its own section and header.', cls: 'setting-item-description' });
+        new Setting(containerEl).setName("📅 calendar groups").setHeading();
+        containerEl.createEl('p', { text: 'Add multiple groups of .ICS feeds. Each group can have its own section and header.', cls: 'setting-item-description' });
         
         this.plugin.settings.calendarGroups.forEach((group, index) => {
             const div = containerEl.createDiv({ 
@@ -208,9 +206,9 @@ class DaySparkSettingTab extends PluginSettingTab {
 
             new Setting(div)
                 .setName('Header')
-                .setDesc('The Markdown header DaySpark will look for or create in your note.')
+                .setDesc('The markdown header DaySpark will look for or create in your note.')
                 .addText(text => text
-                    .setPlaceholder('## Agenda')
+                    .setPlaceholder('## agenda')
                     .setValue(group.header)
                     .onChange(async (val) => {
                         group.header = val;
@@ -228,8 +226,8 @@ class DaySparkSettingTab extends PluginSettingTab {
                     }));
 
             new Setting(div)
-                .setName('ICS URLs')
-                .setDesc('Public iCal URLs or local .ics file paths. Put each one on a new line.')
+                .setName('ICS URLS')
+                .setDesc('Public iCal URLS or local ICS file paths. Put each one on a new line.')
                 .addTextArea(text => text
                     .setPlaceholder('https://calendar.google.com/.../basic.ics\nCalendars/MyEvents.ics')
                     .setValue(group.urls.join('\n'))
@@ -241,7 +239,7 @@ class DaySparkSettingTab extends PluginSettingTab {
 
         new Setting(containerEl)
             .addButton(btn => btn
-                .setButtonText('+ Add calendar group')
+                .setButtonText('Add calendar group')
                 .setCta()
                 .onClick(async () => {
                     this.plugin.settings.calendarGroups.push({
@@ -258,7 +256,7 @@ class DaySparkSettingTab extends PluginSettingTab {
 
         // --- WEATHER ---
         containerEl.createEl('hr');
-        new Setting(containerEl).setName("🌦️ Weather").setHeading();
+        new Setting(containerEl).setName("🌦️ weather").setHeading();
         
         new Setting(containerEl)
             .setName('Enable weather')
@@ -272,7 +270,7 @@ class DaySparkSettingTab extends PluginSettingTab {
         if (this.plugin.settings.enableWeather) {
             new Setting(containerEl)
                 .setName('Use metric units')
-                .setDesc('Celsius and km/h instead of Fahrenheit and mph.')
+                .setDesc('Celsius and km/h instead of fahrenheit and mph.')
                 .addToggle(t => t.setValue(this.plugin.settings.useMetric).onChange(async v => { 
                     this.plugin.settings.useMetric = v; 
                     await this.plugin.saveSettings(); 
@@ -288,7 +286,7 @@ class DaySparkSettingTab extends PluginSettingTab {
 
         // --- MOON ---
         containerEl.createEl('hr');
-        new Setting(containerEl).setName("🌑 Moon phase").setHeading();
+        new Setting(containerEl).setName("🌑 moon phase").setHeading();
         
         new Setting(containerEl)
             .setName('Enable moon phase')
@@ -343,7 +341,7 @@ class DaySparkSettingTab extends PluginSettingTab {
         }
 
         // --- SUN ---
-        new Setting(containerEl).setName("☀️ Sun times").setHeading();
+        new Setting(containerEl).setName("☀️ sun times").setHeading();
         new Setting(containerEl)
             .setName('Enable sun times')
             .setDesc('Include local sunrise and sunset times.')
@@ -364,7 +362,7 @@ class DaySparkSettingTab extends PluginSettingTab {
 
         // --- SKY WATCH (PLANETS) ---
         containerEl.createEl('hr');
-        new Setting(containerEl).setName("🪐 Sky watch").setHeading();
+        new Setting(containerEl).setName("🪐 sky watch").setHeading();
         new Setting(containerEl)
             .setName('Enable planet watch')
             .setDesc('Identifies visible naked-eye planets for the given night.')
@@ -385,7 +383,7 @@ class DaySparkSettingTab extends PluginSettingTab {
 
         // --- CELESTIAL EVENTS ---
         containerEl.createEl('hr');
-        new Setting(containerEl).setName("✨ Celestial events").setHeading();
+        new Setting(containerEl).setName("✨ celestial events").setHeading();
         
         new Setting(containerEl)
             .setName('Enable celestial events')
@@ -406,7 +404,7 @@ class DaySparkSettingTab extends PluginSettingTab {
 
             new Setting(containerEl)
                 .setName('Enable basic events')
-                .setDesc('Conjunctions (☌), Oppositions (☍), and Moon Nodes (☊/☋).')
+                .setDesc('Conjunctions (☌), oppositions (☍), and moon nodes (☊/☋).')
                 .addToggle(t => t.setValue(this.plugin.settings.enableBasicEvents).onChange(async v => { 
                     this.plugin.settings.enableBasicEvents = v; 
                     await this.plugin.saveSettings(); 
@@ -422,7 +420,7 @@ class DaySparkSettingTab extends PluginSettingTab {
 
             new Setting(containerEl)
                 .setName('Enable advanced astronomy')
-                .setDesc('Lunar Perigee/Apogee and extreme Moon declination (Runs High/Low).')
+                .setDesc('Lunar perigee/apogee and extreme moon declination (runs high/low).')
                 .addToggle(t => t.setValue(this.plugin.settings.enableAdvancedAstronomy).onChange(async v => { 
                     this.plugin.settings.enableAdvancedAstronomy = v; 
                     await this.plugin.saveSettings(); 
@@ -431,7 +429,7 @@ class DaySparkSettingTab extends PluginSettingTab {
 
         // --- SEASONS ---
         containerEl.createEl('hr');
-        new Setting(containerEl).setName("📅 Seasons").setHeading();
+        new Setting(containerEl).setName("📅 seasons").setHeading();
         
         new Setting(containerEl)
             .setName('Enable seasons')
@@ -452,7 +450,7 @@ class DaySparkSettingTab extends PluginSettingTab {
 
             new Setting(containerEl)
                 .setName('Enable cross-quarter days')
-                .setDesc('Includes Almanac mid-season markers like Samhain (Nov 1), Imbolc, Beltane, and Lammas.')
+                .setDesc('Includes almanac mid-season markers like samhain (nov 1), imbolc, beltane, and lammas.')
                 .addToggle(t => t.setValue(this.plugin.settings.enableCrossQuarterDays).onChange(async v => { 
                     this.plugin.settings.enableCrossQuarterDays = v; 
                     await this.plugin.saveSettings(); 
@@ -469,7 +467,7 @@ class DaySparkSettingTab extends PluginSettingTab {
 
         // --- ALMANAC LORE ---
         containerEl.createEl('hr');
-        new Setting(containerEl).setName("📜 Almanac lore").setHeading();
+        new Setting(containerEl).setName("📜 almanac lore").setHeading();
 
         new Setting(containerEl)
             .setName('Enable almanac lore')
@@ -491,7 +489,7 @@ class DaySparkSettingTab extends PluginSettingTab {
 
         // --- ON THIS DAY ---
         containerEl.createEl('hr');
-        new Setting(containerEl).setName("📖 On this day").setHeading();
+        new Setting(containerEl).setName("📖 on this day").setHeading();
 
         new Setting(containerEl)
             .setName('Enable on this day')

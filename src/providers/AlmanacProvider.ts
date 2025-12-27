@@ -12,18 +12,18 @@ export class AlmanacProvider implements SparkProvider {
         if (this.settings.almanacHeader) this.targetHeader = this.settings.almanacHeader;
     }
 
-    async getDataForDate(targetDate: Date): Promise<ProviderResult> {
+    getDataForDate(targetDate: Date): Promise<ProviderResult> {
         // 1. Check Toggle
         if (!this.settings.enableAlmanac) {
-            return { items: [] };
+            return Promise.resolve({ items: [] });
         }
 
         // Randomly select a weather rhyme or lore for the specific month
         const lore = this.getDailyLore(targetDate);
         
-        return {
+        return Promise.resolve({
             items: [`📜 **Lore:** _"${lore}"_`]
-        };
+        });
     }
 
     private getDailyLore(date: Date): string {

@@ -11,15 +11,15 @@ fix:
 # Bump "Patch" version (1.0.0 -> 1.0.1)
 # Now requires linting to pass before allowing a version bump
 bump: lint
-	npm version patch --tag-version-prefix=""
+	npm version patch
 	git push --follow-tags
 
 # Bump "Minor" version (1.0.0 -> 1.1.0)
 minor: lint
-	npm version minor --tag-version-prefix=""
+	npm version minor
 	git push --follow-tags
 
 # Bump "Major" version (1.0.0 -> 2.0.0)
 major: lint
-	npm version major --tag-version-prefix=""
+	npm version major
 	git push --follow-tags
