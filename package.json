@@ -1,6 +1,6 @@
 {
   "name": "dayspark",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "A digital almanac for daily notes. Injects ICS calendars, sun/moon phases, celestial conjunctions, meteor showers, weather, and historical context.",
   "main": "main.js",
   "scripts": {
