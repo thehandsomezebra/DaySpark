@@ -89,3 +89,26 @@ DaySpark is built for privacy:
 ## 🗺️ Roadmap
 
 - I think that's it for sure now.
+
+
+
+
+## Installation
+
+### Manual Installation
+
+1. Download the latest release files (manifest.json & main.js) from the [Releases page](https://github.com/thehandsomezebra/DaySpark/releases).
+2. Create a folder named "DaySpark" in the Obsidian plugins folder (.obsidian/plugins).
+3. Copy the files from step 1 into the new folder.
+4. Enable the plugin in the Obsidian settings under the "Community plugins" section. You might have to restart Obsidian to see the plugin.
+
+### Installing through BRAT
+
+1. Install BRAT from the Community Plugins in Obsidian.
+2. Get the link to the GitHub repository: https://github.com/thehandsomezebra/DaySpark
+3. Open the command palette and run the command "BRAT: Add a beta plugin for testing"
+4. Using the link from step 2, copy that into the modal that opens up and Select the latest version (recommended)
+5. Click on Add Plugin -- wait a few seconds and BRAT will tell you what is going on.
+6. After BRAT confirms the installation, in Settings go to the Community plugins tab.
+7. Refresh the list of plugins.
+8. Find the DaySpark in the plugin list and Enable it (If not enabled)
